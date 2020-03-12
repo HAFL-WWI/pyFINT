@@ -40,21 +40,25 @@ class FintController:
     # Private variables
     #
 
+    #Filenames
     m_dem_file_name = None
     m_dsm_file_name = None
     m_nsm_file_name = None
     m_spm_file_name = None
 
+    #Header objects
     m_dem_header = None
     m_dsm_header = None
     m_nsm_header = None
     m_spm_header = None
 
+    #Object repesenting raster source object (rasterio object)
     m_dem_src = None
     m_dsm_src = None
     m_nsm_src = None
     m_spm_src = None
 
+    #Arrays with currently loaded data
     m_dem_data = None
     m_dsm_data = None
     m_nsm_data = None
@@ -63,22 +67,17 @@ class FintController:
     m_dem_nodata_value = None
     m_dsm_nodata_value = None
 
-    #QTextStream* m_demStream
-    #QTextStream* m_dsmStream
-    #QTextStream* m_nsmStream
-    #QTextStream* m_spmStream
-
-    #TIFF* m_demTiffStream
-    #TIFF* m_dsmTiffStream
-    #TIFF* m_nsmTiffStream
-    #TIFF* m_spmTiffStream
-
+    #Type of currently used raster (ASCII or TIFF)
     m_model_file_format = None
 
+    #Current working directory for input and output
     m_working_dir = None
-    #fieldModelDescription m_nsmHeader
+    #fieldModelDescription m_nsmHeader #unused
+
+    #minimum Height for considering pisels as tree
     m_minimum_tree_height = None
 
+    #Working variables
     m_max_crown_radius_in_cells = None
     m_mask = None
     m_mu_parser = None
@@ -87,12 +86,14 @@ class FintController:
     m_mu_altitude = 0
     m_diameter_random_range = None
 
+    #Setting variables
     m_altitude_allowed = None
     m_force_file_overriding = None
     m_use_normalized_surface_model_as_input = False
     m_abort_request = False
     m_is_processing = False
     
+    #Constructor setting feasible standard values based on setting in C++ client
     def __init__(self):
         self.m_model_file_format = ModelFileFormatType.ModelFileFormatUndef
         self.m_max_crown_radius_in_cells = 0
@@ -105,13 +106,14 @@ class FintController:
         self.m_diameter_random_range = 0 
 
         self.m_altitude_allowed = False
-        self.m_force_file_overriding = False
+        self.m_force_file_overriding = True
         self.m_use_normalized_surface_model_as_input = False
         self.m_abort_request = False
         self.m_is_processing = False 
 
         self.m_mask = dominancemask.DominanceMask()
     
+    #Counter Variable and Functions for "progress bar"/progress console output.
     m_max_progress = 0
     def init_progress_bar(self, max_value):
         self.m_max_progress = max_value
@@ -120,9 +122,10 @@ class FintController:
     def reset_progress_bar(self):
         self.m_max_progress = 0
 
-    def set_progress_bar(self, value):
+    def set_progress_bar(self, value): #Print to console instead of graphical progress
         print("\rProcessing {0}%".format(round(value * 100. / self.m_max_progress,2)))
 
+    #Helper hethods for console output
     def display_message (self, message):
         os.system("color 7") #white
         print(message)
@@ -135,6 +138,7 @@ class FintController:
         os.system("color 4") #red
         print(error)
 
+    #Set flag for process termination
     def stop_process(self):
         self.m_abort_request = True
 
@@ -142,9 +146,11 @@ class FintController:
     ## Fintcontrollercore.cpp (mostly)
     ####
 
+    #Check if detection process is running
     def isProcessing(self):
         return self.m_is_processing
 
+    #Set the expression for calculating the DBH based on height.
     def set_dbh_function(self, expression, altitude_allowed ):
         ok = True
         self.m_mu_parser.clear_var()
@@ -161,14 +167,10 @@ class FintController:
         except Exception as e:
             print(str(e))
             ok = False
-            #// special error handling
-            #if ( e.GetToken() == "alt" && e.GetCode() == mu::ecUNASSIGNABLE_TOKEN )
-            #    emit displayError( "The DBH function you specified relies on altitude, but no Digital Elevation Model was provided!" );
-            #else
-            #    emit displayError( QString( "Error when parsing DBH function: %1" ).arg( e.GetMsg().c_str()));
         
         return ok
     
+    #Run the actual detection process
     def run_process(self):
         self.m_abort_request = False
         self.m_is_processing = True
@@ -185,10 +187,7 @@ class FintController:
             self.terminate_process(1)
             return
 
-        #self.m_dem_data = np.empty((0,self.m_nsm_header.nbCols))
-        #self.m_dsm_data = np.empty((0,self.m_nsm_header.nbCols))
-        #self.m_nsm_data = np.empty((0,self.m_nsm_header.nbCols))
-        #self.m_spm_data = np.empty((0,self.m_nsm_header.nbCols))
+        #Initiate arrays for storing currently processed rows
         self.m_dem_data = []
         self.m_dsm_data = []
         self.m_nsm_data = []
@@ -206,11 +205,13 @@ class FintController:
             
 
         #// data will be processed block by block. A block has the width of the model and has a height equal to "blockSize"
+        #=> the "block" is essentially a rectangular window moving over the raster
         blockSize = self.compute_block_size( nCols )
         if (blockSize==0):
             self.terminate_process(1)
             return
 
+        #Calculate number of blocks to be processed. Mainly used for progress couter
         nbBlocks = int(nRows / blockSize)
         if ( nRows % blockSize > 0 ):
             nbBlocks+=1
@@ -219,11 +220,13 @@ class FintController:
         rowOffset = 0
         self.init_progress_bar( nbBlocks * 4 + 4 ) #// there are 4 steps per block, plus 4 additional steps at the end
         progress = 0
+        #Iterate through blocks
         for iBlock in range(nbBlocks):
-            if self.m_abort_request:
+            if self.m_abort_request: #Currently unlikely since it is not multithreaded
                 break
             loadedRows = 0
             if ( self.m_use_normalized_surface_model_as_input ):
+                #Read NSM values from source raster
                 loadedRows = self.load_file_data_lines( self.m_nsm_src, self.m_nsm_data, blockSize, nCols, currentRow )
                 if ( self.m_altitude_allowed ):
                     loadedDEMRows = self.load_file_data_lines( self.m_dem_src, self.m_dem_data, blockSize, nCols, currentRow )
@@ -235,12 +238,15 @@ class FintController:
             else:
                 #// Calculate NSM from DEM and DSM
                 lastIndex = len(self.m_dem_data)
+
+                #Rad values from DEM and DSM rasters 
                 loadedRows = self.load_file_data_lines( self.m_dem_src, self.m_dem_data, blockSize, nCols, currentRow )
                 loadedDSMRows = self.load_file_data_lines( self.m_dsm_src, self.m_dsm_data, blockSize, nCols, currentRow )
 
                 progress += 1
                 self.set_progress_bar( progress )
 
+                #Calculate NSM calues as DSM-DEM and save the values
                 assert( loadedRows == loadedDSMRows )
                 if ( loadedRows > 0 ):
                     for row in range(lastIndex,lastIndex+loadedRows,1):
@@ -255,12 +261,6 @@ class FintController:
                                 self.m_nsm_data[-1][col] =  dsmValue - demValue 
                     #saveNsmData(m_nsmData.begin() + firstRowToAnalyze, m_nsmData.begin() + lastRowToAnalyze, rowOffset + firstRowToAnalyze );
                     self.save_nsm_data(lastIndex, loadedRows, nCols, currentRow)
-
-
-
-                    def load_file_data_lines(self, raster_source, data, row_count, col_count, row_index ):
-                        window = windows.Window(0, row_index, col_count, row_count)
-
     
             #// new raster "species" for future use
             if ( not (self.m_spm_file_name == "" or self.m_spm_file_name == None) ):
@@ -275,17 +275,15 @@ class FintController:
             firstRowToAnalyze = 0 if iBlock == 0 else self.m_max_crown_radius_in_cells
             lastRowToAnalyze = len(self.m_nsm_data) if iBlock == nbBlocks - 1 else len(self.m_nsm_data) - self.m_max_crown_radius_in_cells
     
-            #if ( not self.m_use_normalized_surface_model_as_input ):
-            #    #saveNsmData(m_nsmData.begin() + firstRowToAnalyze, m_nsmData.begin() + lastRowToAnalyze, rowOffset + firstRowToAnalyze );
-            #    self.save_nsm_data(loadedRows, nCols, currentRow, rowOffset, firstRowToAnalyze, len(self.m_nsm_data) if iBlock == 0 else lastRowToAnalyze)
-
             progress += 1
             self.set_progress_bar( progress )
 
+            #for all rows to analyze
             for row in range(firstRowToAnalyze,lastRowToAnalyze,1):
+                #for all columns (0 to raster width)
                 for col in range(0,nCols,1):
                     dominance = self.calculDominance( row, col )
-                    if ( dominance > 0 ):
+                    if ( dominance > 0 ): #Pixel is only a tree if dominance>0
                         assert( not self.m_altitude_allowed or ( row < len(self.m_dem_data) and col < len(self.m_dem_data[row]) ) )
                         altitude = self.m_dem_data[row][col] if self.m_altitude_allowed else 0.0
 
@@ -312,6 +310,9 @@ class FintController:
             progress += 1
             self.set_progress_bar( progress )
     
+        #End iteration through all blocks
+
+        #Calculate diameters an save output files (TXT,CSV and INI)
         if ( not self.m_abort_request ):
             ok = self.compute_all_diameters( trees )
             progress += 1
@@ -333,6 +334,7 @@ class FintController:
 
         self.terminate_process(0)
 
+    #Terminate and cleanup the process.
     def terminate_process(self, ret ):
         self.reset_file(self.m_nsm_src)
         self.reset_file(self.m_dem_src)
@@ -346,9 +348,11 @@ class FintController:
         return ret
         #?: sys.exit(ret)
 
+    #Get the file format used fpr the models
     def file_format(self):
         return self.m_model_file_format
 
+    #Helper function for computing diameters of detected trees by applying the compiled Expression using the parser. Returns a function reference.
     def compute_diameters(self):
         m_parser = dbhparser.DbhParser()
         m_parser.clear_var()
@@ -366,6 +370,7 @@ class FintController:
 
         return operator
 
+    #Randomize the passed diameter value within the configured percentage range
     def randomize_diameter (self, percentage):
         m_random = random.Random(time.localtime(0))
         def operator(item):
@@ -373,8 +378,8 @@ class FintController:
             return True
         return operator
 
-    def compute_all_diameters(self, all_trees):
-                
+    #Compute the diameter for all detected trees using the configured expression and randomization range
+    def compute_all_diameters(self, all_trees):           
         dia_operator = self.compute_diameters()
         for t in all_trees:
             dia_operator(t)
@@ -385,10 +390,12 @@ class FintController:
                 rand_operator(t)
         return True
 
+    #Get x coordinate based on passed index x and the raster metadata
     def xCoord(self, x):
         #return self.m_nsm_data.get_tranform[0] + ( x  + ( m_nsmHeader.spatialReference == spatialReferenceCorner ? 0.5 : 0 ) ) * m_nsmHeader.cellSize
         return self.m_nsm_src.xy(0,x)[0]-( 0.5 if self.m_nsm_header.spatialReference == SpatialReferenceType.spatialReferenceCenter else 0) * self.m_nsm_header.cellSize
-
+    
+    #Get y coordinate based on passed index y and the raster metadata
     def yCoord(self, y, offset):
         #return self.m_nsm_data.get_tranform[3] + ( self.m_nsm_data.height - y - 1 - offset  + ( self.m_nsm_data.spatialReference == spatialReferenceCorner ? 0.5 : 0 ) ) * self.m_nsm_data.res[0]
         #return self.m_nsm_data.get_tranform[3] + ( self.m_nsm_data.height - y - 1 - offset + self.m_nsm_data.res[0]
@@ -396,6 +403,7 @@ class FintController:
         #return self.m_nsm_src.xy(self.m_nsm_header.nbRows - y - 1 - offset,0)[1] #TODO: Check validity for FINT logic
         return self.m_nsm_src.xy(y + offset,0)[1]-( 0.5 if self.m_nsm_header.spatialReference == SpatialReferenceType.spatialReferenceCenter else 0) * self.m_nsm_header.cellSize #TODO: Check validity for FINT logic
 
+    #Calculate the Dominance i.e. the core of the detection
     def calculDominance(self, row, col ):
         #// pour chaque sommet de la liste:
         #// * recherche de max local:
@@ -414,28 +422,32 @@ class FintController:
 
         assert( self.m_max_crown_radius_in_cells < 16 ) ## Can be 30
         dominance = 0
+        #Loop through dominance masks with increasing distance
         for i in range(1,self.m_max_crown_radius_in_cells+1,1):
+            #Get coordinate pairs for neighbors in current mask
             neighbours_at_distance = self.m_mask.coords(i)
 
             neighbour_heights = []
             
+            #For all neighbors in mask
             for i_neighbour_at_distance in neighbours_at_distance:
                 xDistance = i_neighbour_at_distance[0]
                 yDistance = i_neighbour_at_distance[1]
 
+                #Translate relative to absolute coordinates
                 xIndex = row + xDistance
                 yIndex = col + yDistance
                 
                 if (not ( yIndex < 0 or yIndex >= self.m_nsm_header.nbCols or xIndex < 0 or xIndex >= len(self.m_nsm_data) )):
                     assert( xIndex < len(self.m_nsm_data) and yIndex < len(self.m_nsm_data[xIndex]))
 
+                #Get neighbor height if coordinates are within bounds; 0 otherwise
                 neighbour_height = 0 if ( yIndex < 0 
                                           or yIndex >= self.m_nsm_header.nbCols 
                                           or xIndex < 0 
                                           or xIndex >= len(self.m_nsm_data )) \
                                      else self.m_nsm_data[xIndex][yIndex]
-                neighbour_heights.append( neighbour_height )
-            
+                neighbour_heights.append( neighbour_height )          
 
             highest_neighbour = max(neighbour_heights)
             max_height = highest_neighbour
@@ -445,7 +457,9 @@ class FintController:
             #// handle special case where 2 neighbours have the same height (interpolation);
             #// in that case, we consider as a tree the cell that is above and/or on the left
             #// TODO: this does not work if more than 2 contiguous cells have the same height!
-            if ( max_height == tree_height and dominance == 0 and highest_neighbour - neighbour_heights[0] < 4 ):  #TODO: Check logic of last condition
+            ##if ( max_height == tree_height and dominance == 0 and highest_neighbour - neighbour_heights[0] < 4 ):  #TODO: Check logic of last condition
+            ##    dominance+=1
+            if (max_height == tree_height and dominance == 0):
                 dominance+=1
             elif ( max_height >= tree_height or number_of_small_neighbours >= (len(neighbour_heights) / 2) ):
                 return dominance
@@ -453,6 +467,9 @@ class FintController:
                 dominance+=1
         return dominance
 
+    #Compute the size for the plocks to be read from file.
+    #NOTE: The rasterio windowing functions should be able to cope with arbitrary blocksizes. These values from this method have proven to work. 
+    # Remains the question, whether the "manual swapping" approach from the C++ version is necessary or whether the rasterio native random access functions are performant enought.   
     def compute_block_size( self, nCols ):  #TODO: Check necessity with respect to rasterio logic
         #// keep the blocksize rather small, so that the UI is frequently updated
         #// from experience, loading ~150k-200k cells at once is acceptable
@@ -482,39 +499,22 @@ class FintController:
                 block_size = tile_length2
         
         return block_size
-#
-#//QTextStream &operator<<(QTextStream &stream, const floatMatrix &matrix)
-#//{
-#//    for (unsigned int row = 0; row < matrix.size1(); ++row )
-#//    {
-#//        stream << '\n';
-#//        for (unsigned int col = 0; col < matrix.size2() - 1; ++col )
-#//            stream << matrix( row, col ) << ' ';
-#//        stream << matrix( row, matrix.size2() - 1 );
-#//    }
-#//    return stream;
-#//}
-#
-#QTextStream &operator<<(QTextStream &stream, const QVector< float > &row)
-#{
-#    int nbCols = row.count();
-#    stream << '\n';
-#    for (int col = 0; col < nbCols - 1; ++col )
-#        stream << row.at( col ) << ' ';
-#    stream << row.at( nbCols - 1 );
-#    return stream;
-#}
+
 
     ####
     ## Fintcontroller.cpp
     ####
 
+    #Set range value for diameter randomization. The value None disables the use of randomization.
     def set_diameter_randomization(self, random, range):
         self.m_diameter_random_range = range if random else -1
 
+    #Set wehether existing files are to be overwritten.
+    # NOTE: pyFINT currently ignores this value and alweys overwrites by default. 
     def set_force_file_overriding(self, force):
         self.m_force_file_overriding = force
 
+    #Set whether to use a NSM raster as input or a Combination of DEM and DSM
     def use_normalized_surface_model_as_input(self, use_model):
         self.m_use_normalized_surface_model_as_input = use_model
 
@@ -527,6 +527,7 @@ class FintController:
             os.chdir(self.m_working_dir)
         return ok
     
+    #Determine file format based on extension of source file
     def model_file_format_from_file_info(self, filePath ):
         suffix = os.path.splitext(filePath)[1]
         if ( suffix.lower() == ".tif" ):
@@ -536,6 +537,7 @@ class FintController:
         else:
             return ModelFileFormatType.ModelFileFormatUndef
 
+    #Set the path and type of the DEM and DSM input rasters. Assumes that both rasters have the same type.
     def set_digital_model_file_names(self, dem_file_name, dsm_file_name ):
         ok = os.path.isfile(dem_file_name) and os.path.isfile(dsm_file_name)\
             and self.model_file_format_from_file_info(dem_file_name) == self.model_file_format_from_file_info(dsm_file_name)
@@ -545,6 +547,7 @@ class FintController:
             self.m_model_file_format = self.model_file_format_from_file_info( dem_file_name )
         return ok
     
+    #Set the path and type of the NSM input raster
     def set_normalized_model_file_name(self, nsm_file_name, dem_file_name ):
         ok = os.path.isfile(nsm_file_name)
         if ( ok ):
@@ -559,7 +562,7 @@ class FintController:
 
         return ok
 
-
+    #Set the path and type of the species input raster
     def set_species_model_file_name(self, spm_file_name ):
         ok = os.path.isfile(spm_file_name) and\
             self.model_file_format_from_file_info(spm_file_name)  == self.m_model_file_format
@@ -567,16 +570,19 @@ class FintController:
             self.m_spm_file_name = spm_file_name
         return ok
 
+    #Set the minimum height for pixels to eb considered trees
     def set_minimum_height(self, min_tree_height ):
         self.m_minimum_tree_height = min_tree_height
         return True
 
+    #Initiate loading or input data
     def load_nsm_header(self):
         if ( self.m_use_normalized_surface_model_as_input ):
             return self.load_header_from_normalized_model()
         else:
             return self.load_headers_from_digital_models()
 
+    #Load input NSM raster as well as corresponding metadata.    
     def load_header_from_normalized_model(self):
         ok = False
         self.reset_file(self.m_nsm_src)
@@ -592,6 +598,7 @@ class FintController:
                 ok = self.check_headers( dem_header, self.m_nsm_header )
         return ok
 
+    #Load input DEM and DSM rasters as well as corresponding metadata. Set Metadata for NSM accordingly.
     def load_headers_from_digital_models(self):
         ok = True
         dem_header = FieldModelDescription()
@@ -623,6 +630,7 @@ class FintController:
 
         return ok
 
+    #Open TIFF raster using rasterio and read "header" data from metadata
     def load_file_tiff_header(self, file_name, descr ):
         ok = file_name != "" and file_name != None
         raster_file = None
@@ -657,7 +665,7 @@ class FintController:
     
         return [ok,raster_file]
 
-
+    #Set TIFF specific metata in the passed descriptor
     def set_resolution_and_coord_for_tiff(self, xPixelResolution, yPixelResolution, xCoordUpperLeft, yCoordUpperLeft, imageHeight, descr ):
         ok = xPixelResolution == yPixelResolution or xPixelResolution == -yPixelResolution
         if ( not ok ):
@@ -670,6 +678,7 @@ class FintController:
             descr.noDataValue = self.DEFAULT_NODATAVALUE
         return ok
  
+    #Load raster for the goven filename and save metadata in the passed descriptor.
     def load_file_header(self, file_name, descr ):
         if (self.m_model_file_format == ModelFileFormatType.ModelFileFormatAscii):
             return self.load_file_ascii_header( file_name, descr )
@@ -678,7 +687,7 @@ class FintController:
         else:
             return [False,None]
 
-
+    #Open ASCII raster using rasterio and read "header" data from metadata
     def load_file_ascii_header(self, file_name, descr ):
         ok = file_name != "" and file_name != None
         raster_file = None
@@ -733,6 +742,7 @@ class FintController:
         return [ok,raster_file]
 
 
+    #Load requested lines from source using rasterio. Append them to the passed data array
     def load_file_data_lines(self, raster_source, data, row_count, col_count, row_index ):
         window = windows.Window(0, row_index, col_count, row_count)
         lines = raster_source.read(1, window=window)
@@ -744,101 +754,12 @@ class FintController:
             data.append(l)
         return lines.shape[0]
 
-    #{
-    #    if (m_modelFileFormat == modelFileFormatAscii)
-    #        return loadAsciiFileDataLines( asciiStream, data, rowCount, colCount );
-    #    else if (m_modelFileFormat == modelFileFormatTiff)
-    #        return loadTiffFileDataLines( tiffStream, data, rowCount, colCount, rowIndex );
-    #    else
-    #        return -1;
-    #}
-#
-#int fintController::loadAsciiFileDataLines( QTextStream& stream, fintController::modelDataT& data, int rowCount, int colCount  )
-#{
-#    int nbRows = 0;
-#    while ( !stream.atEnd() && nbRows < rowCount )
-#    {
-#        float value = 0;
-#        QVector< float > aLine;
-#        for ( int i = 0; i < colCount; ++i )
-#        {
-#            stream >> value;
-#            aLine.push_back( value );
-#        }
-#        if ( stream.status() == QTextStream::Ok )
-#        {
-#            data.push_back( aLine );
-#            ++nbRows;
-#        }
-#    }
-#    return nbRows;
-#}
-#
-#int fintController::loadTiffFileDataLines(TIFF* stream, fintController::modelDataT& data, int rowCount, int colCount, int currentRow)
-#{
-#    int loadedRows = 0;
-#    if ( TIFFIsTiled( stream ) )
-#    {
-#        int width = TIFFTileSize(stream);
-#        float* buf = static_cast<float*>(_TIFFmalloc(width) );
-#
-#        uint32 imageWidth, imageLength;
-#        uint32 tileWidth, tileLength;
-#        TIFFGetField(stream, TIFFTAG_IMAGEWIDTH, &imageWidth);
-#        TIFFGetField(stream, TIFFTAG_IMAGELENGTH, &imageLength);
-#        TIFFGetField(stream, TIFFTAG_TILEWIDTH, &tileWidth);
-#        TIFFGetField(stream, TIFFTAG_TILELENGTH, &tileLength);
-#
-#        int numberOfLines = std::min( tileLength, imageLength - currentRow );
-#        QVector< float > someLines[numberOfLines];
-#
-#        for (uint32 columnInImage = 0; columnInImage < imageWidth; columnInImage += tileWidth)
-#        {
-#            int numberOfCols = std::min( tileWidth, imageWidth - columnInImage );
-#
-#            TIFFReadTile(stream, buf, columnInImage, currentRow, 0, 0); // what do we do with the last 2 params?
-#            for ( uint32 row = 0; row < numberOfLines; ++row )
-#                for ( uint32 col = 0; col < numberOfCols; ++col )
-#                    someLines[row].push_back( buf[row*tileLength+col] );
-#        }
-#        for ( int line = 0; line < numberOfLines; ++line )
-#            data.push_back(someLines[line]);
-#        loadedRows += numberOfLines;
-#
-#        _TIFFfree(buf);
-#    }
-#    else
-#    {
-#        int width = TIFFScanlineSize(stream);
-#        float* buf = static_cast<float*>(_TIFFmalloc(width) );
-#
-#        int iRow = currentRow;
-#        int endRow = std::min(currentRow+rowCount, m_nsmHeader.nbRows);
-#        bool ok = true;
-#        for (; iRow < endRow && ok; ++iRow)
-#        {
-#            ok = TIFFReadScanline(stream, buf, iRow) == 1; // ok will become false when we reach the end of the file
-#            if (ok)
-#            {
-#                QVector< float > aLine;
-#                for ( int col = 0; col < colCount; ++col )
-#                    aLine.push_back( buf[col] );
-#                data.push_back(aLine);
-#                ++loadedRows;
-#            }
-#        }
-#        _TIFFfree(buf);
-#    }
-#
-#    return loadedRows;
-#}
-#
-
     def reset_file(self, file ):
         if ( file ):
             file.close()
             del file
  
+    #Not actually stream based anymore, since rasterio is handling file access
     def reset_stream(self, stream, tiff_stream ):
         if ( stream ):
             stream.close()
@@ -877,6 +798,8 @@ class FintController:
 #    return spatialRef;
 #}
 #
+
+    #Different sanity checks
     def check_headers(self, model1, model2 ):
         return self.check_grid_sizes(model1,model2) and\
                 self.check_spatial_references(model1,model2) and\
@@ -934,32 +857,11 @@ class FintController:
             ok = False
         return ok
 
-
-#// this checking can only be done after loading the data from dem/dsm files!
-#bool fintController::checkDataSetSizes()
-#{
-#    Q_ASSERT( m_demData.count() > 0 && m_dsmData.count() > 0 );
-#    bool ok = true;
-#    if ( m_nsmHeader.nbCols != m_demData.at( 0 ).count() || m_nsmHeader.nbCols != m_dsmData.at( 0 ).count() )
-#    {
-#        emit displayError( QObject::tr( "Inconsistent number of columns in data!" ) );
-#        ok = false;
-#    }
-#    if ( m_nsmHeader.nbRows != m_demData.count() || m_nsmHeader.nbRows != m_dsmData.count() )
-#    {
-#        emit displayError( QObject::tr( "Inconsistent number of rows in data!" ) );
-#        ok = false;
-#    }
-#    return ok;
-#}
-
-
-
-
     ######
     ## fintcontrollersave.cpp
     ######
 
+    #Save basic NSM data based on DSM metadata using rasterio 
     def save_nsm_header(self):
         self.reset_file(self.m_nsm_src)
         
@@ -973,99 +875,7 @@ class FintController:
         
         return True
 
-#bool fintController::saveAsciiNsmHeader()
-#{
-#    m_nsmStream = new QTextStream;
-#
-#    QString fileName( "nsm.asc" );
-#    bool ok = openFile( fileName, *m_nsmStream, QIODevice::WriteOnly );
-#
-#    if ( ok )
-#    {
-#        m_nsmStream->setRealNumberNotation( QTextStream::FixedNotation );
-#        *m_nsmStream <<
-#                  "ncols " << m_nsmHeader.nbCols <<
-#                  "\nnrows " << m_nsmHeader.nbRows <<
-#                  "\nxll" << s_spatialReferenceString[ m_nsmHeader.spatialReference ] << " " << m_nsmHeader.xCoord <<
-#                  "\nyll" << s_spatialReferenceString[ m_nsmHeader.spatialReference ] << " " << m_nsmHeader.yCoord <<
-#                  "\ncellsize " << m_nsmHeader.cellSize <<
-#                  "\nNODATA_value " << m_nsmHeader.noDataValue;
-#        m_nsmStream->setRealNumberPrecision(4);
-#    }
-#    return ok;
-#}
-#
-#bool fintController::saveTiffNsmHeader()
-#{
-#    m_nsmTiffStream = XTIFFOpen( "nsm.tif","w");
-#
-#    if ( m_nsmTiffStream == NULL )
-#        return false;
-#
-#    // inspired from geotifcp.c, see geotiff sources
-#
-#    uint32 imageWidth, imageLength, rowsPerStrip;
-#    uint16 planarconfig, samplesPerPixel, bitsPerSample, sampleFormat;
-#    uint16 photometric, orientation, compression; // non-mandatory
-#
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_IMAGEWIDTH, &imageWidth))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_IMAGEWIDTH, imageWidth);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_IMAGELENGTH, &imageLength))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_IMAGELENGTH, imageLength);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_ROWSPERSTRIP, &rowsPerStrip))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_SAMPLEFORMAT, &sampleFormat))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_SAMPLEFORMAT, sampleFormat);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_COMPRESSION, &compression))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_COMPRESSION, compression);
-#
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_PLANARCONFIG, &planarconfig))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_PLANARCONFIG, planarconfig);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_PHOTOMETRIC, &photometric))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_PHOTOMETRIC, photometric);
-#
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_SAMPLESPERPIXEL, &samplesPerPixel))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_SAMPLESPERPIXEL, samplesPerPixel);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_BITSPERSAMPLE, &bitsPerSample))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_BITSPERSAMPLE, bitsPerSample);
-#    if (TIFFGetField(m_demTiffStream, TIFFTAG_ORIENTATION, &orientation))
-#        TIFFSetField(m_nsmTiffStream, TIFFTAG_ORIENTATION, orientation);
-#
-#    double *d_list = NULL;
-#    int16   d_list_count;
-#    if (TIFFGetField(m_demTiffStream, GTIFF_TIEPOINTS, &d_list_count, &d_list))
-#        TIFFSetField(m_nsmTiffStream, GTIFF_TIEPOINTS, d_list_count, d_list);
-#    if (TIFFGetField(m_demTiffStream, GTIFF_PIXELSCALE, &d_list_count, &d_list))
-#        TIFFSetField(m_nsmTiffStream, GTIFF_PIXELSCALE, d_list_count, d_list);
-#    if (TIFFGetField(m_demTiffStream, GTIFF_TRANSMATRIX, &d_list_count, &d_list))
-#        TIFFSetField(m_nsmTiffStream, GTIFF_TRANSMATRIX, d_list_count, d_list);
-#
-#    GTIF* gtif = GTIFNew( m_demTiffStream );
-#
-#    /* Here we violate the GTIF abstraction to retarget on another file.
-#       We should just have a function for copying tags from one GTIF object
-#       to another. */
-#    gtif->gt_tif = m_nsmTiffStream;
-#    gtif->gt_flags |= FLAG_FILE_MODIFIED;
-#
-#    /* Install keys and tags */
-#    GTIFWriteKeys(gtif);
-#    GTIFFree(gtif);
-#    return true;
-#}
-
-
-    #def save_nsm_data(self, nRows, nCols, firstRow ,rowOffset, firstRowToAnalyze, lastRowToAnalyze):
-    #    print("save_nsm_data",(0, firstRow+rowOffset, nCols, nRows, firstRowToAnalyze, lastRowToAnalyze))
-    #    window = windows.Window(0, firstRow+rowOffset, nCols, nRows)
-    #    print(firstRow+rowOffset,firstRow+rowOffset+nRows)
-    #    print(len(self.m_nsm_data))
-#
-    #    lines = np.array(self.m_nsm_data[0:nRows],np.float32)
-    #    self.m_nsm_src.write(lines, indexes=1, window=window)
-#
-    #    return True
-
+    #Save calculated NSM raster to file using rasterio
     def save_nsm_data(self, firstDataRow, nRows, nCols, firstRow):
         window = windows.Window(0, firstRow, nCols, nRows)
 
@@ -1074,42 +884,8 @@ class FintController:
 
         return True
 
-#bool fintController::saveAsciiNsmData(fintController::modelDataIter beginData, fintController::modelDataIter endData, unsigned int firstRow )
-#{
-#    Q_UNUSED(firstRow);
-#    m_nsmStream->setRealNumberNotation( QTextStream::FixedNotation );
-#    m_nsmStream->setRealNumberPrecision(4);
-#    fintController::modelDataIter iData = beginData;
-#    for ( ; iData != endData; ++iData )
-#        *m_nsmStream << *iData;
-#    return true;
-#}
-#
-#bool fintController::saveTiffNsmData(fintController::modelDataIter beginData, fintController::modelDataIter endData, unsigned int firstRow)
-#{
-#    float* buf = static_cast<float*>(_TIFFmalloc(m_nsmHeader.nbCols* sizeof(float)) );
-#
-#    unsigned int row = firstRow;
-#    bool ok = true;
-#    fintController::modelDataIter iData = beginData;
-#    for ( ; iData != endData && ok ; ++iData, ++row )
-#    {
-#        int col = 0;
-#        QVector< float >::iterator iCol = iData->begin();
-#        QVector< float >::iterator endCol = iData->end();
-#        for ( ; iCol != endCol; ++iCol )
-#        {
-#            buf[col] = *iCol;
-#            ++col;
-#        }
-#        if (TIFFWriteScanline(m_nsmTiffStream, buf, row, 0) < 0)
-#           ok = false;
-#    }
-#    _TIFFfree(buf);
-#
-#    return ok;
-#}
-#
+
+    #Save the detected Trees to a txt. Makes uses up numpy functions.
     def save_tree_file_txt(self, trees ):
         fileName = os.path.join(self.m_working_dir, "treefile.txt")
         
@@ -1123,6 +899,7 @@ class FintController:
 
         return True
 
+    #Save the detected Trees to a CSV. Makes uses up numpy functions.
     def save_ind_trees_csv(self, trees ):
         fileName = os.path.join(self.m_working_dir, "Ind_trees.csv")
         
@@ -1136,6 +913,7 @@ class FintController:
 
         return True
 
+    #Write INI File. Values are hardcoded
     def save_schema_ini(self):
         fileName = os.path.join(self.m_working_dir, "schema.ini")
         iniFile = open(fileName,"w") 

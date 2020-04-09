@@ -52,27 +52,39 @@ class pyFintController:
     #Filenames
     m_output_suffix = ""
     m_dem_file_name = None
+    m_dem_modified_file_name = None
+    m_dem_original_file_name = None
     m_nsm_file_name = None
     m_nsm_original_file_name = None
     m_nsm_modified_file_name = None
+    m_nsm_max_file_name = None
 
     #Header objects
     m_dem_header = None
+    m_dem_original_header = None
+    m_dem_modified_header = None
     m_nsm_header = None
     m_nsm_original_header = None
     m_nsm_modified_header = None
+    m_nsm_max_header = None
 
     #Object repesenting raster source object (rasterio object)
     m_dem_src = None
+    m_dem_original_src = None
+    m_dem_modified_src = None
     m_nsm_src = None
     m_nsm_original_src = None
     m_nsm_modified_src = None
+    m_nsm_max_src = None
 
     #Arrays with currently loaded data
     m_dem_data = None
+    m_dem_original_data = None
+    m_dem_modified_data = None
     m_nsm_data = None
     m_nsm_original_data = None
     m_nsm_modified_data = None
+    m_nsm_max_data = None
 
     m_min_row = 99999
     m_min_col = 99999
@@ -116,8 +128,21 @@ class pyFintController:
     m_resize_resolution = None
     m_resize_method = None
     m_use_resized_nsm = False
-    m_supported_methods = ["near", "bilinear", "cubic", "cubicspline", "lanczos", "average"]
     m_supported_resolutions = [ 0.25, 0.5, 1, 1.5, 2 ]
+    m_supported_methods = ["near", "bilinear", "cubic", "cubicspline", "lanczos", "average", "mode", "max", "min", "med", "q1", "q3"]
+    #https://gdal.org/programs/gdalwarp.html
+    #near: nearest neighbour resampling (default, fastest algorithm, worst interpolation quality).
+    #bilinear: bilinear resampling.
+    #cubic: cubic resampling.
+    #cubicspline: cubic spline resampling.
+    #lanczos: Lanczos windowed sinc resampling.
+    #average: average resampling, computes the average of all non-NODATA contributing pixels.
+    #mode: mode resampling, selects the value which appears most often of all the sampled points.
+    #max: maximum resampling, selects the maximum value from all non-NODATA contributing pixels.
+    #min: minimum resampling, selects the minimum value from all non-NODATA contributing pixels.
+    #med: median resampling, selects the median value of all non-NODATA contributing pixels.
+    #q1: first quartile resampling, selects the first quartile value of all non-NODATA contributing pixels.
+    #q3: third quartile resampling, selects the third quart
 
     #Constructor setting feasible standard values based on setting in C++ client
     def __init__(self):
@@ -261,6 +286,9 @@ class pyFintController:
 
         #Filter
         if self.m_use_filtered_nsm:
+            if not self.m_output_suffix:
+                self.m_output_suffix = "gauss_sigma{0}_size{1}".format(self.m_filter_sigma,self.m_filter_size)
+
             gkern1d = signal.gaussian(self.m_filter_size, std=self.m_filter_sigma).reshape(self.m_filter_size, 1)
             gkern2d = np.outer(gkern1d, gkern1d)
             gkern2d /= (2*np.pi*(self.m_filter_sigma**2)) #Normalize
@@ -273,24 +301,45 @@ class pyFintController:
             self.m_nsm_modified_data = None
         #Resize
         elif self.m_use_resized_nsm:
+            if not self.m_output_suffix:
+                self.m_output_suffix = "resize_{0}_{1}m".format(self.m_resize_method,self.m_resize_resolution)
             format_extension = "tif" if self.m_model_file_format == ModelFileFormatType.ModelFileFormatTiff else "asc"
-            self.m_nsm_modified_file_name = "nsm_modified.{0}".format(format_extension)
-            self.m_nsm_modified_file_name = os.path.join(self.m_working_dir,self.m_nsm_modified_file_name)
-            
+            self.m_nsm_modified_file_name = "nsm_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
+            self.m_nsm_modified_file_name = os.path.join(self.m_working_dir,self.m_nsm_modified_file_name)            
             gdal.Warp(self.m_nsm_modified_file_name,self.m_nsm_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg=self.m_resize_method)
-            
+
+            if self.m_altitude_allowed:
+                self.m_dem_modified_file_name = "dem_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
+                self.m_dem_modified_file_name = os.path.join(self.m_working_dir,self.m_dem_modified_file_name)
+                gdal.Warp(self.m_dem_modified_file_name,self.m_dem_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg=self.m_resize_method)
+
+            #format_extension = "tif" if self.m_model_file_format == ModelFileFormatType.ModelFileFormatTiff else "asc"
+            #self.m_nsm_max_file_name = "nsm_{1}_max.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
+            #self.m_nsm_max_file_name = os.path.join(self.m_working_dir,self.m_nsm_max_file_name)     
+            #gdal.Warp(self.m_nsm_max_file_name,self.m_nsm_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg="max")
+
+            #max_ok = self.load_header_from_max_model()
+            #if max_ok:
+            #    self.m_nsm_max_data = self.m_nsm_max_src.read(1)
+            #    self.m_nsm_original_data = self.m_nsm_max_data
+            #else:
+            #    self.terminate_process(1)
+            #    return
+
+
+
         if self.m_use_filtered_nsm or self.m_use_resized_nsm:
             self.m_nsm_original_src = self.m_nsm_src
             self.m_nsm_original_data = self.m_nsm_data
             self.m_nsm_original_header = self.m_nsm_header
 
-            self.set_normalized_model_file_name(self.m_nsm_modified_file_name,self.m_dem_file_name)
+            self.set_normalized_model_file_name(self.m_nsm_modified_file_name,self.m_dem_modified_file_name)
 
             #read proper haders from modified nsm
             ok = self.load_nsm_header()
             self.m_nsm_data = self.m_nsm_src.read(1)
             if ( self.m_altitude_allowed ):
-                self.m_dem_data = self.m_dem_src.read(1)
+               self.m_dem_data = self.m_dem_src.read(1)
 
         nRows = self.m_nsm_header.nbRows
         nCols = self.m_nsm_header.nbCols
@@ -321,14 +370,17 @@ class pyFintController:
                     altitude = self.m_dem_data[row][col] if self.m_altitude_allowed else 0.0
 
                     height = None
-                    if self.m_use_filtered_nsm or self.m_use_resized_nsm:
+                    if self.m_use_filtered_nsm:
                         height = self.m_nsm_original_data[row][col]
+                        height_mod = self.m_nsm_data[row][col]
                     else: 
                         height = self.m_nsm_data[row][col]
+                        height_mod = -1.0
 
-                    assert( row < len(self.m_nsm_data) and col < len(self.m_nsm_data[row]) )
-                    trees.append( TreeData( self.xCoord( col ), self.yCoord( row, rowOffset ), 
-                                            dominance,  height, altitude ) )
+                    if ( height > self.m_minimum_tree_height ): # ignore small trees (may have been higher on modified raster)     
+                        assert( row < len(self.m_nsm_data) and col < len(self.m_nsm_data[row]) )
+                        trees.append( TreeData( self.xCoord( col ), self.yCoord( row, rowOffset ), 
+                                                dominance,  height, height_mod, altitude ) )
 
         progress += 1
         self.set_progress_bar( progress )
@@ -606,6 +658,16 @@ class pyFintController:
                 ok = self.check_headers( dem_header, self.m_nsm_header )
         return ok
 
+    #Load resized max NSM raster as well as corresponding metadata.    
+    def load_header_from_max_model(self):
+        ok = False
+        self.reset_file(self.m_nsm_max_src)
+        self.m_nsm_max_header = FieldModelDescription()
+        ok,self.m_nsm_max_src = self.load_file_header( self.m_nsm_max_file_name, self.m_nsm_max_header)
+    
+        return ok
+
+
     #Open TIFF raster using rasterio and read "header" data from metadata
     def load_file_tiff_header(self, file_name, descr ):
         ok = file_name != "" and file_name != None
@@ -615,11 +677,11 @@ class pyFintController:
             self.display_error( "No file name provided!")
     
         if (ok):
-            print("Raster FILENAME",file_name)
-            if os.path.isfile(file_name):
-                print("OS finds file") 
-            else:
-                print("OS doesn't find file")            
+            #print("Raster FILENAME",file_name)
+            #if os.path.isfile(file_name):
+            #    print("OS finds file") 
+            #else:
+            #    print("OS doesn't find file")            
 
             raster_file = rasterio.open(file_name)
             ok = raster_file != None
@@ -850,7 +912,7 @@ class pyFintController:
         out_meta.update({"nodata":no_data})
 
         format_extension = "tif" if self.m_model_file_format == ModelFileFormatType.ModelFileFormatTiff else "asc"
-        self.m_nsm_modified_file_name = "nsm_modified.{0}".format(format_extension)
+        self.m_nsm_modified_file_name = "nsm_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
         self.m_nsm_modified_file_name = os.path.join(self.m_working_dir,self.m_nsm_modified_file_name)
             
         self.m_nsm_modified_src = rasterio.open(self.m_nsm_modified_file_name, "w", **out_meta)
@@ -864,10 +926,10 @@ class pyFintController:
 
     #Save the detected Trees to a txt. Makes uses up numpy functions.
     def save_tree_file_txt(self, trees ):
-        filename = "treefile_{0}.txt".format(self.m_output_suffix) if self.m_output_suffix else "treefile.txt"
+        filename = "treefile{0}.txt".format("_"+self.m_output_suffix if self.m_output_suffix else "") 
         fileName = os.path.join(self.m_working_dir, filename)
         
-        treeArr = np.array([[tree.m_xCoord, tree.m_yCoord,tree.m_height] for tree in trees])
+        treeArr = np.array([[tree.m_xCoord, tree.m_yCoord,tree.m_height,tree.m_height_modified] for tree in trees])
         if len(treeArr)>0:
             np.savetxt(fileName, treeArr, fmt="%15.2f", delimiter=" ", newline="\n", header="", footer="", comments="# ", encoding=None)
             self.display_message("Saved {0}".format(fileName))
@@ -879,12 +941,12 @@ class pyFintController:
 
     #Save the detected Trees to a CSV. Makes uses up numpy functions.
     def save_ind_trees_csv(self, trees ):
-        filename = "Ind_trees_{0}.csv".format(self.m_output_suffix) if self.m_output_suffix else "Ind_trees.csv"
+        filename = "Ind_trees{0}.csv".format("_"+self.m_output_suffix if self.m_output_suffix else "") 
         fileName = os.path.join(self.m_working_dir, filename)
         
-        treeArr = np.array([[tree.m_xCoord, tree.m_yCoord,tree.m_height,tree.m_diameter,tree.m_dominance] for tree in trees])
+        treeArr = np.array([[tree.m_xCoord, tree.m_yCoord,tree.m_height,tree.m_height_modified,tree.m_diameter,tree.m_dominance] for tree in trees])
         if len(treeArr)>0:
-            np.savetxt(fileName, treeArr, fmt=["%.2f","%.2f","%.1f","%.1f","%.1i"], delimiter="; ", newline="\n", header="", footer="", comments="# ", encoding=None)
+            np.savetxt(fileName, treeArr, fmt=["%.2f","%.2f","%.1f","%.1f","%.1f","%.1i"], delimiter="; ", newline="\n", header="", footer="", comments="# ", encoding=None)
             self.display_message("Saved {0}".format(fileName))
         else:
             open(fileName, 'a').close()
@@ -904,8 +966,9 @@ class pyFintController:
         iniFile.write("Col1=X Float\n")
         iniFile.write("Col2=Y Float\n")
         iniFile.write("Col3=Treeheight Float\n")
-        iniFile.write("Col4=DBH Float\n")
-        iniFile.write("Col5=Dominance Float\n")
+        iniFile.write("Col4=TreeheightMod Float\n")
+        iniFile.write("Col5=DBH Float\n")
+        iniFile.write("Col6=Dominance Float\n")
  
         iniFile.close() 
         self.display_message("Saved {0}".format(fileName))

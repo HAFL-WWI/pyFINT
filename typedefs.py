@@ -50,13 +50,15 @@ class TreeData:
     m_yCoord = None
     m_dominance = None
     m_height = None
+    m_height_modified = None
     m_altitude = None
     m_diameter = None
 
-    def __init__ (self, x=0.0, y=0.0, d=0, h=-1.0, a=-0.0):
+    def __init__ (self, x=0.0, y=0.0, d=0, h=-1.0, h_mod=-1.0, a=-0.0):
         self.m_xCoord = x
         self.m_yCoord = y
         self.m_dominance = d
         self.m_height = h
+        self.m_height_modified = h_mod
         self.m_altitude = a
         self.m_diameter = -1.0

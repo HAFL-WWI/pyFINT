@@ -51,6 +51,7 @@ class pyFintController:
 
     #Filenames
     m_output_suffix = ""
+    m_output_suffix_generated = False
     m_dem_file_name = None
     m_dem_modified_file_name = None
     m_dem_original_file_name = None
@@ -100,8 +101,12 @@ class pyFintController:
     m_working_dir = None
     #fieldModelDescription m_nsmHeader #unused
 
-    #minimum Height for considering pisels as tree
+    #minimum height for considering pixels as tree
     m_minimum_tree_height = None
+
+    #minimum height for considering pixels as local maximum during detection
+    m_minimum_detection_tree_height = None
+
 
     #Working variables
     m_max_crown_radius_in_cells = None
@@ -152,6 +157,7 @@ class pyFintController:
         self.m_mu_altitude = 0.
 
         self.m_minimum_tree_height = 4
+        self.m_minimum_detection_tree_height = 1
         self.m_mu_parser = dbhparser.DbhParser()
         self.set_dbh_function("H^1.25", False)
         self.m_diameter_random_range = 0 
@@ -259,6 +265,11 @@ class pyFintController:
     
     #Run the actual detection process
     def run_process(self):
+        m_min_row = 99999
+        m_min_col = 99999
+        m_max_row = -99999
+        m_max_col = -99999
+        
         self.m_abort_request = False
         self.m_is_processing = True
 
@@ -284,25 +295,13 @@ class pyFintController:
         self.set_progress_bar( progress )
 
 
-        #Filter
-        if self.m_use_filtered_nsm:
-            if not self.m_output_suffix:
-                self.m_output_suffix = "gauss_sigma{0}_size{1}".format(self.m_filter_sigma,self.m_filter_size)
 
-            gkern1d = signal.gaussian(self.m_filter_size, std=self.m_filter_sigma).reshape(self.m_filter_size, 1)
-            gkern2d = np.outer(gkern1d, gkern1d)
-            gkern2d /= (2*np.pi*(self.m_filter_sigma**2)) #Normalize
-        
-            self.m_nsm_modified_data = convolve(self.m_nsm_data,gkern2d,mode='reflect')
-
-            self.save_nsm_modified_header()
-            self.save_nsm_modified_data(self.m_nsm_modified_data)
-            self.reset_file(self.m_nsm_modified_src)
-            self.m_nsm_modified_data = None
         #Resize
-        elif self.m_use_resized_nsm:
+        if self.m_use_resized_nsm and (self.m_nsm_header.cellSize != self.m_resize_resolution):
             if not self.m_output_suffix:
                 self.m_output_suffix = "resize_{0}_{1}m".format(self.m_resize_method,self.m_resize_resolution)
+                self.m_output_suffix_generated = True
+
             format_extension = "tif" if self.m_model_file_format == ModelFileFormatType.ModelFileFormatTiff else "asc"
             self.m_nsm_modified_file_name = "nsm_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
             self.m_nsm_modified_file_name = os.path.join(self.m_working_dir,self.m_nsm_modified_file_name)            
@@ -312,26 +311,54 @@ class pyFintController:
                 self.m_dem_modified_file_name = "dem_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
                 self.m_dem_modified_file_name = os.path.join(self.m_working_dir,self.m_dem_modified_file_name)
                 gdal.Warp(self.m_dem_modified_file_name,self.m_dem_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg=self.m_resize_method)
+                ##not working as expected
+                #translateoptions = gdal.TranslateOptions(gdal.ParseCommandLine("-of Gtiff -co COMPRESS=LZW"))  
+                #gdal.Translate(self.m_dem_modified_file_name, self.m_dem_modified_file_name, options=translateoptions)
 
-            #format_extension = "tif" if self.m_model_file_format == ModelFileFormatType.ModelFileFormatTiff else "asc"
-            #self.m_nsm_max_file_name = "nsm_{1}_max.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
-            #self.m_nsm_max_file_name = os.path.join(self.m_working_dir,self.m_nsm_max_file_name)     
-            #gdal.Warp(self.m_nsm_max_file_name,self.m_nsm_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg="max")
-
-            #max_ok = self.load_header_from_max_model()
-            #if max_ok:
-            #    self.m_nsm_max_data = self.m_nsm_max_src.read(1)
-            #    self.m_nsm_original_data = self.m_nsm_max_data
-            #else:
-            #    self.terminate_process(1)
-            #    return
-
-
-
-        if self.m_use_filtered_nsm or self.m_use_resized_nsm:
             self.m_nsm_original_src = self.m_nsm_src
             self.m_nsm_original_data = self.m_nsm_data
             self.m_nsm_original_header = self.m_nsm_header
+
+            self.set_normalized_model_file_name(self.m_nsm_modified_file_name,self.m_dem_modified_file_name)
+
+            #read proper haders from modified nsm
+            ok = self.load_nsm_header()
+            self.m_nsm_data = self.m_nsm_src.read(1)
+            if ( self.m_altitude_allowed ):
+               self.m_dem_data = self.m_dem_src.read(1)
+        else: 
+            if not self.m_output_suffix:
+                self.m_output_suffix = "resize_{0}_{1}m".format(self.m_resize_method,self.m_resize_resolution)
+                self.m_output_suffix_generated = True
+
+            self.m_nsm_original_src = self.m_nsm_src
+            self.m_nsm_original_data = self.m_nsm_data
+            self.m_nsm_original_header = self.m_nsm_header
+
+
+        #Filter
+        if self.m_use_filtered_nsm:
+            if (not self.m_output_suffix):
+                self.m_output_suffix = "gauss_sigma{0}_size{1}".format(self.m_filter_sigma,self.m_filter_size)
+            elif self.m_output_suffix and self.m_output_suffix_generated:
+                self.m_output_suffix = "{0}_gauss_sigma{1}_size{2}".format(self.m_output_suffix,self.m_filter_sigma,self.m_filter_size)
+
+
+            gkern1d = signal.gaussian(self.m_filter_size, std=self.m_filter_sigma).reshape(self.m_filter_size, 1)
+            gkern2d = np.outer(gkern1d, gkern1d)
+            gkern2d /= (2*np.pi*(self.m_filter_sigma**2)) #Normalize
+        
+            self.m_nsm_modified_data = convolve(self.m_nsm_data,gkern2d,mode='reflect')
+
+            self.save_nsm_modified_header()
+            self.save_nsm_modified_data(self.m_nsm_modified_data) #self.m_nsm_modified_file_name is set in function
+            self.reset_file(self.m_nsm_modified_src)
+            self.m_nsm_modified_data = None
+
+            if (not self.m_use_resized_nsm): #Original references not set yet
+                self.m_nsm_original_src = self.m_nsm_src
+                self.m_nsm_original_data = self.m_nsm_data
+                self.m_nsm_original_header = self.m_nsm_header
 
             self.set_normalized_model_file_name(self.m_nsm_modified_file_name,self.m_dem_modified_file_name)
 
@@ -355,6 +382,7 @@ class pyFintController:
         currentRow = 0
         rowOffset = 0
  
+        #firstRowToAnalyze and lastRowToAnalyze were modified in order to exclude the border pixels
         firstRowToAnalyze = 1 
         lastRowToAnalyze = len(self.m_nsm_data)-1 
         progress += 1
@@ -364,6 +392,8 @@ class pyFintController:
         for row in range(firstRowToAnalyze,lastRowToAnalyze,1):
             #for all columns (0 to raster width)
             for col in range(1,nCols-1,1):
+                if (np.isnan(self.m_nsm_data[row][col])):
+                    continue
                 dominance = self.calculDominance( row, col )
                 if ( dominance > 0 ): #Pixel is only a tree if dominance>0
                     assert( not self.m_altitude_allowed or ( row < len(self.m_dem_data) and col < len(self.m_dem_data[row]) ) )
@@ -405,7 +435,7 @@ class pyFintController:
             self.save_schema_ini()
             progress += 1
             self.set_progress_bar( progress )
-            print(self.m_nsm_header.nbRows,self.m_nsm_header.nbCols,self.m_min_row,self.m_max_row,self.m_min_col,self.m_max_col )
+            #print(self.m_nsm_header.nbRows,self.m_nsm_header.nbCols,self.m_min_row,self.m_max_row,self.m_min_col,self.m_max_col )
         else:
             self.display_message( "Process aborted by user - no files saved.")
 
@@ -501,7 +531,7 @@ class pyFintController:
 
         assert ( row < len(self.m_nsm_data) and col < len(self.m_nsm_data[row]))
         tree_height = self.m_nsm_data[row][col]
-        if ( tree_height < self.m_minimum_tree_height ): # ignore small trees
+        if ( tree_height < self.m_minimum_detection_tree_height ): # ignore small trees
             return 0
 
         assert( self.m_max_crown_radius_in_cells < 16 ) ## Can be 30
@@ -512,6 +542,8 @@ class pyFintController:
             neighbours_at_distance = self.m_mask.coords(i)
 
             neighbour_heights = []
+            above_neighbor_heights = [-999]
+            left_neighbor_heights = [-999]
             
             #For all neighbors in mask
             for i_neighbour_at_distance in neighbours_at_distance:
@@ -531,10 +563,19 @@ class pyFintController:
                                           or xIndex < 0 
                                           or xIndex >= len(self.m_nsm_data )) \
                                      else self.m_nsm_data[xIndex][yIndex]
-                neighbour_heights.append( neighbour_height )          
+                neighbour_heights.append( neighbour_height )  
+                if (dominance==0): #first ring --> direct neighbors
+                   if (xDistance==-1): #row above
+                       above_neighbor_heights.append(neighbour_height)
+                   elif (xDistance==0 and yDistance==-1): #left neighbor
+                       left_neighbor_heights.append(neighbour_height)
+
 
             highest_neighbour = max(neighbour_heights)
             max_height = highest_neighbour
+            max_above_height = max(above_neighbor_heights)
+            max_left_height = max(left_neighbor_heights)
+            max_predecessor_height = max(max_above_height,max_left_height)
             number_of_small_neighbours = sum(height < 1 for height in neighbour_heights)
 
             #// stop if max_height >= tree_height or more than half of the neighbours are < 1
@@ -543,15 +584,31 @@ class pyFintController:
             #// TODO: this does not work if more than 2 contiguous cells have the same height!
             ##if ( max_height == tree_height and dominance == 0 and highest_neighbour - neighbour_heights[0] < 4 ):  #TODO: Check logic of last condition
             ##    dominance+=1
-            if (max_height == tree_height and dominance == 0):
-                dominance+=1
+            if (max_height == tree_height and dominance == 0): #at least one direct neighbor has the same height
+                if (max_predecessor_height==tree_height): #one of the previously processed neighbors has the same height
+                    if (col>1 and row>1): #inside the raster --> predecessor should be maximum, this is not a maximum
+                        return 0
+                    elif (col>1 and row==1): #uppermost row, inside the raster
+                        if (max_left_height==tree_height): #left predecessor has already been detected --> this is not a maximum
+                            return 0
+                        else: #maximum is in neighbors above (ignored outermost row) --> detect this as maximum
+                            dominance+=1
+                    elif (col==1 and row>1): #leftmost row, inside raster
+                        if (max_above_height < tree_height): #same value is in the (ignoroed outermost) left neighbor -->  detect this as maximum
+                            dominance+=1
+                        else: #maximum is in tha already processed neighbors above --> this is not maximum
+                            return 0
+                    else: #upper left corner --> previous neighbors are ignored by processing --> detect this as maximum
+                        dominance+=1
+                else: #one of the subsequently processed neighbors has the same height --> detect this as maximum
+                    dominance+=1
             elif ( max_height >= tree_height or number_of_small_neighbours >= (len(neighbour_heights) / 2) ):
                 return dominance
             else:
                 dominance+=1
         return dominance
 
-    #Compute the size for the plocks to be read from file.
+    #Compute the size for the blocks to be read from file.
     #NOTE: The rasterio windowing functions should be able to cope with arbitrary blocksizes. These values from this method have proven to work. 
     # Remains the question, whether the "manual swapping" approach from the C++ version is necessary or whether the rasterio native random access functions are performant enought.   
     def compute_block_size( self, nCols ):  #TODO: Check necessity with respect to rasterio logic
@@ -633,6 +690,11 @@ class pyFintController:
     #Set the minimum height for pixels to eb considered trees
     def set_minimum_height(self, min_tree_height ):
         self.m_minimum_tree_height = min_tree_height
+        return True
+
+    #Set the minimum height for pixels to eb considered trees in dominance search
+    def set_minimum_detection_height(self, min_tree_height ):
+        self.m_minimum_detection_tree_height = min_tree_height
         return True
 
     #Initiate loading or input data

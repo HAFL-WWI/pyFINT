@@ -1,8 +1,10 @@
 ######################################################################
-# Script with type definitions used by FINT.
-# Adapted from FINT C++ implementation v1.10 from July 2017. 
+# This script is based on the software FINT (C++ implementation v1.10 
+# from July 2017; (C) ecorisQ - Luuk Dorren, Nicolas Zuanon)
 #
-# (C) Christoph Schaller, BFH
+# Author: Christoph Schaller, BFH-HAFL, December 2020
+#
+# Script with type definitions used by FINT.
 ######################################################################
 
 from enum import Enum

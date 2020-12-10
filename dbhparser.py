@@ -1,11 +1,14 @@
 ######################################################################
+# This script is based on the software FINT (C++ implementation v1.10 
+# from July 2017; (C) ecorisQ - Luuk Dorren, Nicolas Zuanon)
+#
+# Author: Christoph Schaller, BFH-HAFL, December 2020
+#
 # Script with class for parsing DBH functions with python based syntax. 
 #
 # Basing on https://raw.githubusercontent.com/pyparsing/pyparsing/master/examples/fourFn.py
 # and https://raw.githubusercontent.com/pyparsing/pyparsing/master/examples/SimpleCalc.py
-#
-# (C) Christoph Schaller, BFH
-######################################################################
+#######################################################################
 from pyparsing import Literal,Word,Group,\
     ZeroOrMore,Forward,alphas,alphanums,Regex,ParseException,\
     CaselessKeyword, Suppress

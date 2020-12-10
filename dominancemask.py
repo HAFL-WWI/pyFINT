@@ -1,3 +1,12 @@
+######################################################################
+# This script is based on the software FINT (C++ implementation v1.10 
+# from July 2017; (C) ecorisQ - Luuk Dorren, Nicolas Zuanon)
+#
+# Author: Christoph Schaller, BFH-HAFL, December 2020
+#
+# Script with the Definition of the Dominance used in the detection.
+######################################################################
+
 class DominanceMask:
     #def neighbours_by_distance
 

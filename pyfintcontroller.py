@@ -43,10 +43,6 @@ class pyFintController:
     HEADER_NODATA = 5
     DEFAULT_NODATAVALUE = -9999.0
 
-#    dbh_functions = {
-#        "H^1.25": lambda h, alt: h**1.25
-#    }
-
     #
     # Private variables
     #
@@ -161,7 +157,7 @@ class pyFintController:
         self.m_minimum_tree_height = 4
         self.m_minimum_detection_tree_height = 1
         self.m_mu_parser = dbhparser.DbhParser()
-        self.set_dbh_function("H^1.25", False)
+        self.set_dbh_function("2.52*H^0.84", False)
         self.m_diameter_random_range = 0 
 
         self.m_altitude_allowed = False
@@ -236,12 +232,6 @@ class pyFintController:
     def set_use_resized_nsm(self, use_resized):
         self.m_use_resized_nsm = use_resized
 
-#    def set_dbh_function_by_key(self, func_key, altitude_allowed ):
-#        if func_key in self.dbh_functions:
-#            return self.set_dbh_function(self.dbh_functions[func_key],altitude_allowed)
-#        else:
-#            return False
-
     def set_dbh_function(self, expression, altitude_allowed ):
         ok = True
         self.m_mu_parser.clear_var()
@@ -258,12 +248,6 @@ class pyFintController:
         except Exception as e:
             print(str(e))
             ok = False
-            #// special error handling
-            #if ( e.GetToken() == "alt" && e.GetCode() == mu::ecUNASSIGNABLE_TOKEN )
-            #    emit displayError( "The DBH function you specified relies on altitude, but no Digital Elevation Model was provided!" );
-            #else
-            #    emit displayError( QString( "Error when parsing DBH function: %1" ).arg( e.GetMsg().c_str()));
-        
     
     #Run the actual detection process
     def run_process(self):
@@ -313,9 +297,6 @@ class pyFintController:
                 self.m_dem_modified_file_name = "dem_{1}.{0}".format(format_extension,self.m_output_suffix if self.m_output_suffix else "")
                 self.m_dem_modified_file_name = os.path.join(self.m_working_dir,self.m_dem_modified_file_name)
                 gdal.Warp(self.m_dem_modified_file_name,self.m_dem_file_name, xRes=self.m_resize_resolution, yRes=self.m_resize_resolution, resampleAlg=self.m_resize_method)
-                ##not working as expected
-                #translateoptions = gdal.TranslateOptions(gdal.ParseCommandLine("-of Gtiff -co COMPRESS=LZW"))  
-                #gdal.Translate(self.m_dem_modified_file_name, self.m_dem_modified_file_name, options=translateoptions)
 
             self.m_nsm_original_src = self.m_nsm_src
             self.m_nsm_original_data = self.m_nsm_data
@@ -507,10 +488,6 @@ class pyFintController:
     
     #Get y coordinate based on passed index y and the raster metadata
     def yCoord(self, y, offset):
-        #return self.m_nsm_data.get_tranform[3] + ( self.m_nsm_data.height - y - 1 - offset  + ( self.m_nsm_data.spatialReference == spatialReferenceCorner ? 0.5 : 0 ) ) * self.m_nsm_data.res[0]
-        #return self.m_nsm_data.get_tranform[3] + ( self.m_nsm_data.height - y - 1 - offset + self.m_nsm_data.res[0]
-        
-        #return self.m_nsm_src.xy(self.m_nsm_header.nbRows - y - 1 - offset,0)[1] #TODO: Check validity for FINT logic
         return self.m_nsm_src.xy(y + offset,0)[1]-( 0.5 if self.m_nsm_header.spatialReference == SpatialReferenceType.spatialReferenceCenter else 0) * self.m_nsm_header.cellSize #TODO: Check validity for FINT logic
 
     #Calculate the Dominance i.e. the core of the detection
@@ -615,7 +592,7 @@ class pyFintController:
 
     #Compute the size for the blocks to be read from file.
     #NOTE: The rasterio windowing functions should be able to cope with arbitrary blocksizes. These values from this method have proven to work. 
-    # Remains the question, whether the "manual swapping" approach from the C++ version is necessary or whether the rasterio native random access functions are performant enought.   
+    #Remains the question, whether the "manual swapping" approach from the C++ version is necessary or whether the rasterio native random access functions are performant enought.   
     def compute_block_size( self, nCols ):  #TODO: Check necessity with respect to rasterio logic
         #// keep the blocksize rather small, so that the UI is frequently updated
         #// from experience, loading ~150k-200k cells at once is acceptable
@@ -744,12 +721,6 @@ class pyFintController:
             self.display_error( "No file name provided!")
     
         if (ok):
-            #print("Raster FILENAME",file_name)
-            #if os.path.isfile(file_name):
-            #    print("OS finds file") 
-            #else:
-            #    print("OS doesn't find file")            
-
             raster_file = rasterio.open(file_name)
             ok = raster_file != None
     
@@ -833,14 +804,6 @@ class pyFintController:
             yCoord = transform[3]
 
             spatialRef = SpatialReferenceType.spatialReferenceUndefined
-#            if ( keyword.contains( "corner", Qt::CaseInsensitive ) )
-#            {
-#                spatialRef = spatialReferenceCorner;
-#            }
-#            else if ( keyword.contains( "center", Qt::CaseInsensitive ) )
-#            {
-#                spatialRef = spatialReferenceCenter;
-#            }
 
             descr.nbRows = nbRows
             descr.nbCols = nbCols
@@ -856,10 +819,7 @@ class pyFintController:
     def load_file_data_lines(self, raster_source, data, row_count, col_count, row_index ):
         window = windows.Window(0, row_index, col_count, row_count)
         lines = raster_source.read(1, window=window)
-        #if data:
-        #    data = np.vstack((data,lines))
-        #else:
-        #    data = lines
+
         for l in lines:
             data.append(l)
         return lines.shape[0]
@@ -873,41 +833,15 @@ class pyFintController:
     def reset_stream(self, stream, tiff_stream ):
         if ( stream ):
             stream.close()
-            #? del stream
-    #        delete *stream;
 
         if ( tiff_stream ):
             tiff_stream.close()
-            #? del tiff_stream
-    #        *tiffStream = NULL;
 
 
 
     #####
     ## fintcotrollerchecks.cpp
     #####
-
-#spatialReferenceType fintController::spatialReferenceFromHeader(QStringList &header)
-#{
-#    spatialReferenceType spatialRef = spatialReferenceUndefined;
-#    QString keyword;
-#    int xCoord = 0;
-#    Q_ASSERT( header.count() == 6 );
-#    extractKeywordAndValueFromString( header.at( HEADER_XLL ), keyword, xCoord );
-#    Q_ASSERT( keyword.startsWith( "xll", Qt::CaseInsensitive) );
-#
-#    if ( keyword.contains( "corner", Qt::CaseInsensitive ) )
-#    {
-#        spatialRef = spatialReferenceCorner;
-#    }
-#    else if ( keyword.contains( "center", Qt::CaseInsensitive ) )
-#    {
-#        spatialRef = spatialReferenceCenter;
-#    }
-#
-#    return spatialRef;
-#}
-#
 
     #Different sanity checks
     def check_headers(self, model1, model2 ):

@@ -330,7 +330,10 @@ class pyFintController:
                self.m_dem_data = self.m_dem_src.read(1)
         else: 
             if not self.m_output_suffix:
-                self.m_output_suffix = "resize_{0}_{1}m".format(self.m_resize_method,self.m_resize_resolution)
+                if self.m_resize_method:
+                    self.m_output_suffix = "resize_{0}_{1}m".format(self.m_resize_method,self.m_resize_resolution)
+                else: 
+                    self.m_output_suffix = "resize_None".format(self.m_resize_method,self.m_resize_resolution)
                 self.m_output_suffix_generated = True
 
             self.m_nsm_original_src = self.m_nsm_src

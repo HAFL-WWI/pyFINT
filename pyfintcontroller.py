@@ -675,8 +675,8 @@ class pyFintController:
         return True
 
     #Set the minimum height for pixels to eb considered trees in dominance search
-    def set_minimum_detection_height(self, min_tree_height ):
-        self.m_minimum_detection_tree_height = min_tree_height
+    def set_minimum_detection_height(self, minimum_detection_height):
+        self.m_minimum_detection_tree_height = minimum_detection_height
         return True
 
     #Initiate loading or input data
@@ -967,7 +967,7 @@ class pyFintController:
         iniFile.write("Col1=X Float\n")
         iniFile.write("Col2=Y Float\n")
         iniFile.write("Col3=Treeheight Float\n")
-        iniFile.write("Col4=TreeheightMod Float\n")
+        iniFile.write("Col4=TreeheightModifiedGauss Float\n")
         iniFile.write("Col5=DBH Float\n")
         iniFile.write("Col6=Dominance Float\n")
  

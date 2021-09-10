@@ -891,7 +891,6 @@ class pyFintController:
 
     #// this checking can only be done after loading the data from dem/dsm files!
     def check_data_set_sizes(self):
-#        assert( len(self.m_dem_data) > 0 and len(self.m_dsm_data) > 0 )
         assert( len(self.m_nsm_data) > 0 and len(self.m_dem_data) > 0 )
         ok = True
         if ( self.m_nsm_header.nbCols != len(self.m_dem_data[0])):

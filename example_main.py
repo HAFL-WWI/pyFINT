@@ -12,7 +12,7 @@ import argparse
 
 from datetime import datetime, date, time, timedelta
 import time
-from fintcontroller import *
+from pyfintcontroller import *
 
 # Default entry point
 if __name__ == "__main__":
@@ -31,10 +31,6 @@ if __name__ == "__main__":
     #Paths to input rasters 
     #Vegetation Height Model/Normalised Surface Model
     nsm_file = "VHM_1m.tif" 
-    #Surface Model
-    dom_file = "LDOM_Uebungsperimeter.tif"
-    #Terrain Model
-    dtm_file = "LDTM_Uebungsperimeter.tif"
 
     #
     # Standard Detection with 1m input VHM without resizing of filtering
@@ -47,28 +43,6 @@ if __name__ == "__main__":
     fint_controller.set_normalized_model_file_name(nsm_file,None)
     #Tell the controller to use the NSM as source
     fint_controller.use_normalized_surface_model_as_input(True)
-    #Set the function for calculating the DBH, whether to allow altitude in calculation
-    fint_controller.set_dbh_function("2.52*H^0.84", False)
-    #Whether to randomize the DBH value and the degree of deviation in percent
-    fint_controller.set_diameter_randomization(False,20) 
-    #Minimum height of a pixel to be considered for a local maxima
-    fint_controller.set_minimum_height(1)
-    #Minimum height for a detected maxima to be consideres as a tree
-    fint_controller.set_minimum_detection_height(4)
-    #Tell the controller to run the detection
-    fint_controller.run_process()
-
-    #
-    # Standard Detection with 1m DOM and DTM calculating the NSM
-    #
-    fint_controller = pyFintController()
-    fint_controller.set_working_dir(working_dir)
-    #Whether to allow the use of altitude in DBH calculation (requires DEM)
-    fint_controller.m_altitude_allowed = False
-    #DOM and DTM used for the process
-    fint_controller.set_digital_model_file_names(dtm_file, dom_file)
-    #Tell the controller NOT to use the NSM (i.e. the NSM will be calculated from the DOM and DTM)
-    fint_controller.use_normalized_surface_model_as_input(False)
     #Set the function for calculating the DBH, whether to allow altitude in calculation
     fint_controller.set_dbh_function("2.52*H^0.84", False)
     #Whether to randomize the DBH value and the degree of deviation in percent

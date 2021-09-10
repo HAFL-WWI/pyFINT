@@ -2,11 +2,15 @@
 # This script is based on the software FINT (C++ implementation v1.10 
 # from July 2017; (C) ecorisQ - Luuk Dorren, Nicolas Zuanon)
 #
+# Copyright (C) 2021 ecorisQ
+# Use of this source code is governed by an MIT-style license that can be found in the LICENSE 
+# file or at https://opensource.org/licenses/MIT.
+#
 # Author: Christoph Schaller, BFH-HAFL, December 2020
 #
 # Script with class for parsing DBH functions with python based syntax. 
 #
-# Basing on https://raw.githubusercontent.com/pyparsing/pyparsing/master/examples/fourFn.py
+# Basing on inputs from https://raw.githubusercontent.com/pyparsing/pyparsing/master/examples/fourFn.py
 # and https://raw.githubusercontent.com/pyparsing/pyparsing/master/examples/SimpleCalc.py
 #######################################################################
 from pyparsing import Literal,Word,Group,\

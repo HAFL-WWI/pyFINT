@@ -1,4 +1,8 @@
 ######################################################################
+# Copyright (C) 2021 ecorisQ
+# Use of this source code is governed by an MIT-style license that can be found in the LICENSE 
+# file or at https://opensource.org/licenses/MIT.
+#
 # Author: Christoph Schaller, BFH-HAFL, December 2020
 #
 # Script for demonstrating the use of pyFINT. The script expects

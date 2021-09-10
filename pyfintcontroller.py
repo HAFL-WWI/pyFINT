@@ -186,15 +186,18 @@ class pyFintController:
         
     #Helper hethods for console output
     def display_message (self, message):
-        os.system("color 7") #white
+        if sys.platform == "win32":
+            os.system("color 7") #white
         print(message)
 
     def display_warning (self, warning):
-        os.system("color 6") #yellow
+        if sys.platform == "win32":
+            os.system("color 6") #yellow
         print(warning)
 
     def display_error (self, error):
-        os.system("color 4") #red
+        if sys.platform == "win32":
+            os.system("color 4") #red
         print(error)
 
     #Set flag for process termination

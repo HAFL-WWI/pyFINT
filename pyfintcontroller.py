@@ -118,7 +118,6 @@ class pyFintController:
     #Setting variables
     m_altitude_allowed = None
     m_force_file_overriding = None
-    m_use_normalized_surface_model_as_input = False
     m_abort_request = False
     m_is_processing = False
     
@@ -162,7 +161,6 @@ class pyFintController:
 
         self.m_altitude_allowed = False
         self.m_force_file_overriding = True
-        self.m_use_normalized_surface_model_as_input = False
         self.m_abort_request = False
         self.m_is_processing = False 
 
@@ -631,9 +629,6 @@ class pyFintController:
     def set_force_file_overriding(self, force):
         self.m_force_file_overriding = force
 
-    #Set whether to use a NSM raster as input or a Combination of DEM and DSM
-    def use_normalized_surface_model_as_input(self, use_model):
-        self.m_use_normalized_surface_model_as_input = use_model
 
     #// set the working directory
     #// error out if the folder does not exist
@@ -681,11 +676,8 @@ class pyFintController:
 
     #Initiate loading or input data
     def load_nsm_header(self):
-        if ( self.m_use_normalized_surface_model_as_input ):
-            return self.load_header_from_normalized_model()
-        else:
-            return self.load_headers_from_digital_models()
-
+        return self.load_header_from_normalized_model()
+        
     #Load input NSM raster as well as corresponding metadata.    
     def load_header_from_normalized_model(self):
         ok = False

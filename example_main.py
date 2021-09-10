@@ -41,8 +41,6 @@ if __name__ == "__main__":
     fint_controller.m_altitude_allowed = False
     #NSM/VHM used for detection
     fint_controller.set_normalized_model_file_name(nsm_file,None)
-    #Tell the controller to use the NSM as source
-    fint_controller.use_normalized_surface_model_as_input(True)
     #Set the function for calculating the DBH, whether to allow altitude in calculation
     fint_controller.set_dbh_function("2.52*H^0.84", False)
     #Whether to randomize the DBH value and the degree of deviation in percent
@@ -63,8 +61,6 @@ if __name__ == "__main__":
     fint_controller.m_altitude_allowed = False
     #NSM/VHM used for detection
     fint_controller.set_normalized_model_file_name(nsm_file,None)
-    #Tell the controller to use the NSM as source
-    fint_controller.use_normalized_surface_model_as_input(True)
     #Set the function for calculating the DBH, whether to allow altitude in calculation
     fint_controller.set_dbh_function("2.52*H^0.84", False)
     #Whether to randomize the DBH value and the degree of deviation in percent
@@ -88,8 +84,6 @@ if __name__ == "__main__":
     fint_controller.m_altitude_allowed = False
     #NSM/VHM used for detection
     fint_controller.set_normalized_model_file_name(nsm_file,None)
-    #Tell the controller to use the NSM as source
-    fint_controller.use_normalized_surface_model_as_input(True)
     #Set the function for calculating the DBH, whether to allow altitude in calculation
     fint_controller.set_dbh_function("2.52*H^0.84", False)
     #Whether to randomize the DBH value and the degree of deviation in percent
@@ -112,8 +106,6 @@ if __name__ == "__main__":
     fint_controller.m_altitude_allowed = False
     #NSM/VHM used for detection
     fint_controller.set_normalized_model_file_name(nsm_file,None)
-    #Tell the controller to use the NSM as source
-    fint_controller.use_normalized_surface_model_as_input(True)
     #Set the function for calculating the DBH, whether to allow altitude in calculation
     fint_controller.set_dbh_function("2.52*H^0.84", False)
     #Whether to randomize the DBH value and the degree of deviation in percent

@@ -34,7 +34,7 @@ if __name__ == "__main__":
     working_dir = os.getcwd()
     #Paths to input rasters 
     #Vegetation Height Model/Normalised Surface Model
-    nsm_file = "VHM_1m.tif" 
+    nsm_file = "./sample_data/VHM_1m.tif" 
 
     #
     # Standard Detection with 1m input VHM without resizing of filtering

@@ -958,10 +958,10 @@ class pyFintController:
         fileName = os.path.join(self.m_working_dir, "schema.ini")
         iniFile = open(fileName,"w") 
 
-        iniFile.write("Ind_trees.csv\n")
+        iniFile.write("[Ind_trees.csv]\n")
         iniFile.write("ColNameHeader=False\n")
         iniFile.write("Format=Delimited(;)\n")
-        iniFile.write("CharacterSet=OEM)\n")
+        iniFile.write("CharacterSet=OEM\n")
         iniFile.write("Col1=X Float\n")
         iniFile.write("Col2=Y Float\n")
         iniFile.write("Col3=Treeheight Float\n")

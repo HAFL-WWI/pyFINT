@@ -10,11 +10,8 @@
 ######################################################################
 
 import os
-import sys
-import importlib
-import argparse
 
-from datetime import datetime, date, time, timedelta
+from datetime import timedelta
 import time
 from pyfintcontroller import *
 
@@ -26,9 +23,6 @@ if __name__ == "__main__":
     #Expected resolution is 1m
     #One Filter example
     #One 1.5m resize example
-
-    #Change to select, which test is run
-    variant = 3
 
     #Path to output folder
     working_dir = os.path.join(os.getcwd(), "output")

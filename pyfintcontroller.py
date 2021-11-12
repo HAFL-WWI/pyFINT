@@ -955,10 +955,11 @@ class pyFintController:
 
     #Write INI File. Values are hardcoded
     def save_schema_ini(self):
-        fileName = os.path.join(self.m_working_dir, "schema.ini")
-        iniFile = open(fileName,"w") 
+        inifileName = os.path.join(self.m_working_dir, "schema.ini")
+        iniFile = open(inifileName,"a") 
 
-        iniFile.write("[Ind_trees.csv]\n")
+        filename = "Ind_trees{0}.csv".format("_"+self.m_output_suffix if self.m_output_suffix else "")
+        iniFile.write("["+filename+"]\n")
         iniFile.write("ColNameHeader=False\n")
         iniFile.write("Format=Delimited(;)\n")
         iniFile.write("CharacterSet=OEM\n")
@@ -968,8 +969,9 @@ class pyFintController:
         iniFile.write("Col4=TreeheightModifiedGauss Float\n")
         iniFile.write("Col5=DBH Float\n")
         iniFile.write("Col6=Dominance Float\n")
+        iniFile.write("\n")
  
         iniFile.close() 
-        self.display_message("Saved {0}".format(fileName))
+        self.display_message("Saved {0}".format(inifileName))
         return True
 

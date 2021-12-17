@@ -1,7 +1,9 @@
 ######################################################################
+# Copyright (C) 2021 BFH
+#
 # Script for processing Cantons in the FINT-CH project. 
 #
-# (C) Christoph Schaller, BFH
+# Author: Christoph Schaller, BFH-HAFL, December 2021
 ######################################################################
 
 import os

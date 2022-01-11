@@ -1,8 +1,11 @@
 ######################################################################
+# Copyright (C) 2021 BFH
+#
 # Helper functions for processing with pyFINT. 
 #
-# (C) Christoph Schaller, BFH
+# Author: Christoph Schaller, BFH-HAFL, December 2021
 ######################################################################
+
 
 import os
 import sys

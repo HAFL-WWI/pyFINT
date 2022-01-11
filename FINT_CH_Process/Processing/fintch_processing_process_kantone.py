@@ -11,12 +11,10 @@ import sys
 import math
 import glob
 
-import numpy as np
-
 import fiona
-
 from shapely.geometry import Point, box
-from osgeo import ogr
+from shapely.wkt import dumps, loads
+from osgeo import ogr, osr, gdal
 
 #Path to the folder containing pyFINT
 PYFINT_HOME = os.environ.get("PYFINT_HOME")
@@ -32,9 +30,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-from osgeo import ogr, osr, gdal
 import psycopg2
-from shapely.wkt import dumps, loads
 
 import configparser
 
@@ -42,12 +38,14 @@ from datetime import datetime, date, time, timedelta
 import time
 
 from multiprocessing import Process, Pool, Queue, JoinableQueue, current_process, freeze_support
+from queue import Empty
 
 import logging
 import traceback
 
 import fintch_processing_core
 
+#Worker function for the parallel execution of tile configuration objects in the specified queue. 
 def worker(q, work_function, cfg):
     db_connection = psycopg2.connect(host=cfg.get("db","host"), dbname=cfg.get("db","dbname"), user=cfg.get("db","user"), password=cfg.get("db","password"))
 
@@ -59,32 +57,41 @@ def worker(q, work_function, cfg):
 
     while True:
         #Consume work as long as there are items in the queue
-        if q.qsize()>0:
+        try: 
             flaeche_record = q.get()
+            if flaeche_record == None:
+                q.task_done()
+                print("Queue End")
+                break
+
             if "waldmaske" in flaeche_record and flaeche_record["waldmaske"] != None and flaeche_record["waldmaske"] != "" :
+                #Read the forest mask when used the first time 
                 if flaeche_record["waldmaske"] != current_forest_mask_path:
                     current_forest_mask_path = flaeche_record["waldmaske"]
                     forest_mask_df = gpd.read_file(current_forest_mask_path)
-
+                #Otherwise: same mask -> use already loaded data
                 flaeche_record["waldmaske_df"] = forest_mask_df
 
             if "trasse_maske" in flaeche_record and flaeche_record["trasse_maske"] != None and flaeche_record["trasse_maske"] != "":
+                #Read the power line stretch mask when used the first time 
                 if flaeche_record["trasse_maske"] != current_trasse_mask_path:
                     current_trasse_mask_path = flaeche_record["trasse_maske"]
                     trasse_mask_df = gpd.read_file(current_trasse_mask_path)
-
+                #Otherwise: same mask -> use already loaded data
                 flaeche_record["trasse_mask_df"] = trasse_mask_df
-
 
             work_function(flaeche_record,db_connection)
             q.task_done()
+        except Empty:
+            print("Queue empty")
+            break
 
-        else:
-            #No more work available
-            print("Exit:",current_process())
-            db_connection.close()
-            return
+    #No more work available
+    print("Exit:",current_process())
+    db_connection.close()
+    return         
 
+#Setup the tiles for the perimeters, add their configurations to a queue and execute a designated function in a parallelized manner.
 def process_setup(parameter_sets, flaechen_df, flaeche_id_column, flaeche_info_df, process_function, table_schema, table_base_name, cfg, add_forest_mask = False, add_trasse_mask = False, num_processes = 1):
     # Create queues
     perimeter_queue = JoinableQueue()
@@ -103,8 +110,10 @@ def process_setup(parameter_sets, flaechen_df, flaeche_id_column, flaeche_info_d
         maxx = int((flaeche_bounds[2]//1000)*1000+1000)
         maxy = int((flaeche_bounds[3]//1000)*1000+1000)
 
+        #Create 1km2 square tiles
         for x in range(minx,maxx,1000):
             for y in range(miny,maxy,1000):
+                #Might need to be modified for projections other than LV95/EPSG:2056
                 tile_id = x//1000*10000+y//1000
 
                 tile_geom = box(x,y,x+1000,y+1000)
@@ -141,6 +150,7 @@ def process_setup(parameter_sets, flaechen_df, flaeche_id_column, flaeche_info_d
 
     #Create and start worker processes 
     for i in range(num_processes):
+        perimeter_queue.put(None)
         proc = Process(target=worker, args=(perimeter_queue,process_function,cfg,))
         print("Start: ",proc)
         proc.start()
@@ -149,6 +159,7 @@ def process_setup(parameter_sets, flaechen_df, flaeche_id_column, flaeche_info_d
 
     print("Processing finished")
 
+#Configure the logger for the process
 def configure_log(cfg):
     log_path = cfg.get("fintch_processing_paths","log_path")
     logfile_info_path = os.path.join(log_path, current_process().name+"_info.log")
@@ -174,7 +185,6 @@ def configure_log(cfg):
     sys.stderr = LogFile('stderr')
 
 
-
 # Default entry point
 if __name__ == "__main__":
 
@@ -188,10 +198,15 @@ if __name__ == "__main__":
     cfg._interpolation = configparser.ExtendedInterpolation()
     cfg.read(ini_config_file)
 
+    #Path for storing files for the individual tiles during detection
     result_base_path = cfg.get("fintch_processing_paths","result_base_path")
+    #Path for storing the log file
     log_path = cfg.get("fintch_processing_paths","log_path")
-    flaechen_info_path = r"Q:\fint-ch\Geodaten\kantone_info.csv"
+    #Shapefile with the perimeter outlines
     flaechen_path = r"Q:\fint-ch\Geodaten\Kantone\outline.shp"  
+    #CSV with the perimeter specific configurations
+    flaechen_info_path = r"Q:\fint-ch\Geodaten\kantone_info.csv"
+    #Name of the ID column in the outline shapefile used to match the configuration information in the CSV
     flaeche_id_column = "fid"
 
     flaechen_df = gpd.read_file(flaechen_path)
@@ -200,32 +215,38 @@ if __name__ == "__main__":
     ensure_dir(result_base_path)
     ensure_dir(log_path)
 
-    truncate = False
-
     configure_log(cfg)
 
+    #Database schema to create the result tables in
     table_schema = "fintch"
+    #Prefix for the result tables
     table_base_name = "fint"
-    table_owner = "geoserver"
+    #Name of the table owner
+    table_owner = "fintch"
+    #Whether to add the forest mask to the configuration (usually recommended)
+    add_forest_mask = True
+    #Whether to add mask with power lines stretches to the configuration (optional)
     add_trasse_mask = True
+
+    #Open database connection
     db_connection = psycopg2.connect(host=cfg.get("db","host"), dbname=cfg.get("db","dbname"), user=cfg.get("db","user"), password=cfg.get("db","password"))
     srid = cfg.get("pyfint","epsg")
+    #Create the necessary database tables
+    #WARNING: existing tables are dropped
     fintch_processing_core.create_db_tables(table_schema,table_base_name,table_owner,srid,db_connection)
     
+    #Base configurations for detection needed for the FINT-CH forest structure types
     parameter_sets = {
         31: {"vhm_source":"VHM_ALS", "dbh_function":"2.52*H^0.84", "randomized":False, "random_variance":0, "altitutde_allowed":False, "use_normalized_surfacemodel":True, "minimum_detection_tree_height":1, "minimum_tree_height":4, "gauss_sigma":"",  "gauss_size":"", "resize_method":"bilinear", "resize_resolution":1, "output_suffix":"", "preprocessing":"", "postprocessing":""},
         32: {"vhm_source":"VHM_ALS", "dbh_function":"2.52*H^0.84", "randomized":False, "random_variance":0, "altitutde_allowed":False, "use_normalized_surfacemodel":True, "minimum_detection_tree_height":1, "minimum_tree_height":4, "gauss_sigma":"",  "gauss_size":"", "resize_method":"bilinear", "resize_resolution":1.5, "output_suffix":"", "preprocessing":"", "postprocessing":""},
         34: {"vhm_source":"VHM_ALS", "dbh_function":"2.52*H^0.84", "randomized":False, "random_variance":0, "altitutde_allowed":False, "use_normalized_surfacemodel":True, "minimum_detection_tree_height":1, "minimum_tree_height":4, "gauss_sigma":2,  "gauss_size":3, "resize_method":"bilinear", "resize_resolution":1, "output_suffix":"", "preprocessing":"", "postprocessing":""},
     }
 
+    #Setup and execute the actual detection (including the generation of the combined detection method)
     process_setup(parameter_sets,flaechen_df,flaeche_id_column,flaeche_info_df,fintch_processing_core.process_detection,table_schema,table_base_name,cfg, add_forest_mask=add_forest_mask, num_processes = 40)
-
-    cursor = db_connection.cursor()
-    cursor.execute("TRUNCATE TABLE "+table_schema+"."+table_base_name+"_processed_tree")
-    db_connection.commit()
-    cursor.close()
-
+    #Setup and exexute the derivation of the forest structure types (Note that mote than 15 processes may slow down the overall process)
     process_setup(parameter_sets,flaechen_df,flaeche_id_column,flaeche_info_df,fintch_processing_core.process_fst,table_schema,table_base_name,cfg,add_forest_mask=add_forest_mask,num_processes = 15)
+    #Setup and execute the generation of the final result by picking and combining trees based on forest structure type
     process_setup(parameter_sets,flaechen_df,flaeche_id_column,flaeche_info_df,fintch_processing_core.process_trees,table_schema,table_base_name,cfg,add_forest_mask=add_forest_mask,add_trasse_mask=add_trasse_mask,num_processes = 40)
 
     db_connection.close()

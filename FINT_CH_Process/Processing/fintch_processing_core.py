@@ -622,11 +622,9 @@ def merge_processing(fint_trees_df):
     r_max = 1.5
     dh_max = 5
     #2m oder sigma 2 5/7
-    matching_configs = {32: {"Source":32, "Target":31, "rmax":r_max}, 
-    #33: {"Source":33, "Target":31, "rmax":r_max}, 
-    34: {"Source":34, "Target":31, "rmax":r_max}, 
-    #35: {"Source":35, "Target":31, "rmax":r_max}, 
-    #36: {"Source":36, "Target":31, "rmax":r_max}
+    matching_configs = {
+        32: {"Source":32, "Target":31, "rmax":r_max}, 
+        34: {"Source":34, "Target":31, "rmax":r_max}
     }
 
     if len(fint_trees_df)==0:
@@ -675,14 +673,12 @@ def merge_processing(fint_trees_df):
 
         sorted_test_trees = values.sort_values(["hoehe"],ascending=False)    
         for tindex, ttree in sorted_test_trees.iterrows():
-            #TODO: Check if FINT tree is in Plot bbox? -> Raster was choses a bit larger
             h_test = ttree["hoehe"]
             candidates = []
 
             x_tt = ttree["x"]
             y_tt = ttree["y"]
             
-            #candidate_trees = aoi_trees.cx[x_tt-r_max:x_tt+r_max, y_tt-r_max:y_tt+r_max]        
             candidate_idx = list(aoi_trees_index.intersection([x_tt-r_max,y_tt-r_max,x_tt+r_max,y_tt+r_max]))
             candidate_trees = aoi_trees.iloc[candidate_idx]
 
@@ -712,10 +708,6 @@ def merge_processing(fint_trees_df):
     aoi_trees_filtered_37 = aoi_trees[(aoi_trees["matched32"]!=0) | (aoi_trees["matched34"]!=0) ].copy()
     aoi_trees_filtered_37["parameterset_id"] = 37
 
-    #aoi_trees_filtered_38 = aoi_trees[(aoi_trees["matched33"]!=0) | (aoi_trees["matched35"]!=0) | (aoi_trees["matched36"]!=0) ].copy()
-    #aoi_trees_filtered_38["parameterset_id"] = 38
-
-    #ret = gpd.GeoDataFrame(pd.concat([fint_trees_df,aoi_trees_filtered_37,aoi_trees_filtered_38], ignore_index=True), crs=fint_trees_df.crs)
     ret = gpd.GeoDataFrame(pd.concat([fint_trees_df,aoi_trees_filtered_37], ignore_index=True), crs=fint_trees_df.crs)
     return ret
 

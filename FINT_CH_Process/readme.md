@@ -15,6 +15,11 @@ Due to the large data volume and license issues no data from the FINT-CH project
 
 #### Perimeter Outlines
 The process operates on perimeters whose outlines must be provided in the form of a ESRI shapefile. The file must have a column with a unique ID per perimeter. More than one perimeter may be provided in the same file. However, the perimeters should not overlap to prevent the repeated detection and inclusion of the same tree in the final result. The perimeter doesn’t need to be tiled as the process will automatically generate tiles of 1km2 for parallelization. While the detection of the border tiles may include areas outside the perimeter, only trees within the border are retained. For the FINT-CH project the cantonal borders derived from the swissTLM dataset from swisstopo have been used as perimeter outlines. Other boundary datasets like swissBoundaries3D from swisstopo or perhaps the boundary datasets from BFS Geostat are possible alternatives.
+The outline can be extracted i.e.
+```
+curl $(curl -s https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swissboundaries3d/items | jq -r '.features[-1].assets[] | select(.type=="application/x.shapefile+zip").href') | bsdtar --strip-components 1 -xvf- *KANTONSGEBIET*
+ogr2ogr outline.shp  swissBOUNDARIES3D_*_TLM_KANTONSGEBIET.shp -dialect sqlite -sql "SELECT ST_Union(geometry), KANTONSNUM, NAME, KANTONSNUM as fid FROM swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET GROUP BY KANTONSNUM ORDER BY KANTONSNUM" -t_srs EPSG:2056
+```
 
 #### Vegetation Height Model
 A normalized surface model respectively a Vegetation Height Model (VHM) must be provided as GeoTIFF raster. The VHM is used as input for the actual tree detection. Each perimeter may use a separate VHM raster. VHM with a resolution of 1m derived from ALS data with high point density (&ge;15 points/m2) is recommended as input. Higher resolutions of &lt;1m would work but lower resolutions of &gt;1m would interfere with the filter logic defined in the FINT-CH project.
@@ -27,9 +32,20 @@ The mixing degree with a 10m raster resolution as GeoTIFF is needed as input for
 
 #### Forest Mask
 While not strictly necessary, a forest mask should be provided as ESRI shapefile. The mask is used to reduce the detected points to forest areas, thus largely eliminating noise and false positive in non-forest areas. Care has to be taken that the polygon geometries in the forest mask are topologically correct in order to avoid errors in the process. A separate mask per perimeter is possible. As the definition of "forest" may differ from canton to canton, a mask conforming to the definition of the specific application/client should be used. The forest classes of the swissTLM3D ground cover layer may be used as an alternative source. 
+The forest mask can be extracted i.e.
+```
+curl $(curl -s https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swisstlm3d/items | jq -r '.features[-1].assets[] | select(.type=="application/x.shapefile+zip").href') | bsdtar --strip-components 2 -xvf- *BODENBEDECKUNG* *VERSORGUNGS_BAUTE_LIN*
+ogr2ogr wald.shp swissTLM3D_TLM_BODENBEDECKUNG_west.shp -dialect sqlite -sql "SELECT geometry, UUID, OBJEKTART FROM swissTLM3D_TLM_BODENBEDECKUNG_west WHERE OBJEKTART='Wald'" -t_srs EPSG:2056
+ogr2ogr wald.shp -append swissTLM3D_TLM_BODENBEDECKUNG_ost.shp -dialect sqlite -sql "SELECT geometry, UUID, OBJEKTART FROM swissTLM3D_TLM_BODENBEDECKUNG_ost WHERE OBJEKTART='Wald'" -t_srs EPSG:2056
+```
 
 #### Power Line Stretches
 Optionally a ESRI shapefile with polygons indicating the stretches where powerlines are located can be provided. These polygons are used to eliminate false positives caused by the powerlines and their masts. A separate mask per perimeter is possible.
+The trasse can be extracted i.e.
+```
+curl $(curl -s https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swisstlm3d/items | jq -r '.features[-1].assets[] | select(.type=="application/x.shapefile+zip").href') | bsdtar --strip-components 2 -xvf- *BODENBEDECKUNG*
+ogr2ogr trasse.shp swissTLM3D_TLM_VERSORGUNGS_BAUTE_LIN.shp -dialect sqlite -sql "SELECT ST_Buffer(geometry,10), UUID, OBJEKTART FROM swissTLM3D_TLM_VERSORGUNGS_BAUTE_LIN WHERE OBJEKTART='Hochspannungsleitung'" -t_srs EPSG:2056
+```
 
 ### Database
 The process requires a PostgreSQL database with installed PostGIS extension for storing the detection results. PostgreSQL 10 or higher is recommended. The database, a target schema, and a user need to be manually created and configured beforehand. The user needs privileges to create and delete tables on the target schema. Its credentials along with the database connection information have to be specified in the configuration. The necessary database tables are created by the process itself.

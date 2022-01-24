@@ -411,12 +411,13 @@ def determine_fst(grid_path,vhm150_path,mixing_degree_path,envelope):
     dg_ds = driver_gtiff.Create(dg_classified_path, vhm_ds.RasterXSize, vhm_ds.RasterYSize, 1, gdal.GDT_Byte, dst_options)
     CopyDatasetInfo(vhm_ds, dg_ds)
     band_out = dg_ds.GetRasterBand(1)
+    band_out.SetNoDataValue(255)
     BandWriteArray(band_out, data_out)
 
     vhm_ds, dg_min_ds, dg_ds = None, None, None
 
     # Zonal stats
-    stats = zonal_stats(grid_path, dg_classified_path, stats=['mean'], all_touched=True)
+    stats = zonal_stats(grid_path, dg_classified_path, stats=['mean'], all_touched=True, nodata=255)
 
     # iterate over all features and add stand attribute values
     counter = 0
@@ -831,12 +832,12 @@ def process_trees(record,db_connection):
 
         parameterset_id = fst_parameterset_mappings[fst]
 
-        tile_trees = fint_trees_db[(fint_trees_db["parameterset_id"]== parameterset_id) & (fint_trees_db["x"]>=tminx) & (fint_trees_db["x"]<tmaxx) & (fint_trees_db["y"]>=tminy) & (fint_trees_db["y"]<tmaxy)]
-        tile_trees["fst_tile_id"] = fst_tile_id
-        
-        if len(tile_trees)>0:
-            tile_trees["fst"] = fst
-            picked_trees.append(tile_trees.copy())
+        selection = (fint_trees_db["parameterset_id"]== parameterset_id) & (fint_trees_db["x"]>=tminx) & (fint_trees_db["x"]<tmaxx) & (fint_trees_db["y"]>=tminy) & (fint_trees_db["y"]<tmaxy)
+        fint_trees_db.loc[selection, "fst_tile_id"] = fst_tile_id
+
+        if len(fint_trees_db[selection])>0:
+            fint_trees_db.loc[selection, "fst"] = fst
+            picked_trees.append(fint_trees_db[selection].copy())
         
 
     if len(picked_trees) == 0:
@@ -855,9 +856,6 @@ def process_trees(record,db_connection):
         waldmaske_df = record["waldmaske_df"]
         pointInForest = sjoin(picked_trees_df, waldmaske_df[[waldmaske_df.geometry.name]], how='left')
         picked_trees_df = pointInForest[np.invert(np.isnan(pointInForest["index_right"]))].drop(columns=["index_right"])
-
-    if perimeter_id == 26331246:
-        print("foo")
 
     if "trasse_mask_df" in record and type(record["trasse_mask_df"])!=type(None):
         trasse_mask_df = record["trasse_mask_df"]

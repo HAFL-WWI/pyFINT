@@ -133,7 +133,7 @@ def process_setup(parameter_sets, flaechen_df, flaeche_id_column, flaeche_info_d
                         "perimeter_buffer" : cfg.getint("pyfint","perimeter_buffer"),
                         "r_max" : cfg.getfloat("pyfint","r_max"),
                         "epsg" : cfg.get("pyfint","epsg"),
-                        "crs" : {'init': "epsg:"+cfg.get("pyfint","epsg")},
+                        "crs" : "epsg:"+cfg.get("pyfint","epsg"),
 
                         "table_schema": table_schema, 
                         "table_base_name": table_base_name,

@@ -230,7 +230,7 @@ def generate_grid(min_x, min_y, max_x, max_y, out_shape_path, crs=2056, step_x=2
     out_layer = None
     try:
         out_layer = out_ds.CreateLayer(out_shape_path,srs=srs,geom_type=ogr.wkbPolygon )
-    except Error as ex: 
+    except Exception as ex: 
         logger.error("Error generating grid ", out_shape_path)
         logger.error(traceback.format_exception(*sys.exc_info()))
         raise ex

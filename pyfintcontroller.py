@@ -345,11 +345,10 @@ class pyFintController:
             self.save_nsm_modified_data(self.m_nsm_modified_data) #self.m_nsm_modified_file_name is set in function
             self.reset_file(self.m_nsm_modified_src)
             self.m_nsm_modified_data = None
-
-            if (not self.m_use_resized_nsm): #Original references not set yet
-                self.m_nsm_original_src = self.m_nsm_src
-                self.m_nsm_original_data = self.m_nsm_data
-                self.m_nsm_original_header = self.m_nsm_header
+            
+            self.m_nsm_original_src = self.m_nsm_src
+            self.m_nsm_original_data = self.m_nsm_data
+            self.m_nsm_original_header = self.m_nsm_header
 
             self.set_normalized_model_file_name(self.m_nsm_modified_file_name,self.m_dem_modified_file_name)
 
